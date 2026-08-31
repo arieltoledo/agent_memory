@@ -1,0 +1,39 @@
+id: T39
+kind: GOLDEN
+source: "Golden Set v0.2.0 — #I Privacy & Purge — T39 Explicit Forget Request"
+summary: "Sensitive personal memory exists; user asks to forget it. PURGE_REQUEST, content revoked, erasure started."
+initial_state:
+  branch: personal
+  active_branch: personal
+  revision: 5
+  policy_version: 1
+  core_version: 1
+  records:
+    health.status:
+      value: "vault-ref-123"
+      status: ACTIVE
+      domain: PERSONAL
+      sensitivity: SENSITIVE
+  leases:
+    - lease_id: lease-1
+      record_id: health.status
+      status: VALID
+input:
+  text: "Olvidá lo que te conté sobre mi salud."
+  requested_memory_keys:
+    - health.status
+forced_model_output:
+  operations:
+    - op: PURGE_REQUEST
+      target: health.status
+      reason_code: user_request
+expected:
+  result: PURGE_REQUEST
+  error_code: null
+  security_outcome: PASS
+  architectural_outcome: PASS
+  expected_detection_layer: PURGE_ENGINE
+  actual_detection_layer: PURGE_ENGINE
+  policy_bypass: false
+status: ACTIVE
+notes: "Personal PURGE only (DR-04), I22/I37/I38."

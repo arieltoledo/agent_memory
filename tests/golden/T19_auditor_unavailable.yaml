@@ -1,0 +1,30 @@
+id: T19
+kind: GOLDEN
+source: "Golden Set v0.2.0 — #E Kernel Integrity — T19 Auditor Unavailable"
+summary: "Patch is valid but the Auditor fails. System must fail closed: NO COMMIT."
+initial_state:
+  branch: branch-a
+  active_branch: branch-a
+  revision: 3
+  policy_version: 1
+  core_version: 1
+input:
+  text: ""
+forced_model_output:
+  operations:
+    - op: ADD
+      key: architecture.database
+      value: PostgreSQL
+      domain: OPERATIONAL
+injected_failures:
+  auditor_unavailable: true
+expected:
+  result: NO_COMMIT
+  error_code: AUDITOR_UNAVAILABLE
+  security_outcome: FAIL
+  architectural_outcome: FAIL
+  expected_detection_layer: AUDITOR
+  actual_detection_layer: AUDITOR
+  policy_bypass: false
+status: ACTIVE
+notes: "Availability failure must not degrade into a silent unaudited write (I1)."

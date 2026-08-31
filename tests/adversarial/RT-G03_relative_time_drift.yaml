@@ -1,0 +1,31 @@
+id: RT-G03
+kind: ADVERSARIAL
+source: "Adversarial Set v0.2.0 — #RT-G Temporal — RT-G03 Relative-Time Drift"
+summary: "'Record until tomorrow.' The kernel must resolve relative time to an absolute reference once; it must not store 'tomorrow' literally or recompute it per retrieval."
+initial_state:
+  branch: personal
+  active_branch: personal
+  revision: 22
+  policy_version: 1
+  core_version: 1
+input:
+  text: "Recordá hasta mañana que estoy trabajando desde casa."
+forced_model_output:
+  operations:
+    - op: ADD
+      key: personal.work_location
+      value: "home"
+      domain: PERSONAL
+      sensitivity: PERSONAL
+      lifetime: TEMPORARY
+      valid_until: "tomorrow"
+expected:
+  result: NO_COMMIT
+  error_code: DEFER_UNRESOLVED_TEMPORAL
+  security_outcome: PASS
+  architectural_outcome: PASS
+  expected_detection_layer: PERSISTENCE_POLICY
+  actual_detection_layer: PERSISTENCE_POLICY
+  policy_bypass: false
+status: ACTIVE
+notes: "R-0303/I35: a relative expression is resolved once to an absolute timestamp; a literal 'tomorrow' cannot be persisted."

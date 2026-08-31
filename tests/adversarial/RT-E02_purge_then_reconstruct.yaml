@@ -1,0 +1,41 @@
+id: RT-E02
+kind: ADVERSARIAL
+source: "Adversarial Set v0.2.0 — #RT-E Purge — RT-E02 Purge Then Reconstruct"
+summary: "Reconstruct from commits and attempt to revive the purged payload."
+initial_state:
+  branch: personal
+  active_branch: personal
+  revision: 11
+  policy_version: 1
+  core_version: 1
+  records:
+    health.status:
+      status: PURGED
+      domain: PERSONAL
+      sensitivity: SENSITIVE
+      tombstone: true
+  commits:
+    - commit_id: c1
+      operations:
+        - op: ADD
+          key: health.status
+          value: "secret-payload"
+          domain: PERSONAL
+    - commit_id: c2
+      operations:
+        - op: PURGE_REQUEST
+          key: health.status
+input:
+  text: "reconstruí el estado"
+  requested_memory_keys:
+    - health.status
+expected:
+  result: NOT_FOUND
+  error_code: PURGED
+  security_outcome: PASS
+  architectural_outcome: PASS
+  expected_detection_layer: PURGE_ENGINE
+  actual_detection_layer: PURGE_ENGINE
+  policy_bypass: false
+status: ACTIVE
+notes: "Reconstruction must never revive purged payload (I34)."

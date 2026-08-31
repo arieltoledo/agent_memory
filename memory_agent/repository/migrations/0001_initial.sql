@@ -65,6 +65,7 @@ CREATE TABLE evidence (
     inline_sanitized_text TEXT,
     payload_id TEXT REFERENCES payload_objects(id),
     sanitization_applied BOOLEAN NOT NULL,
+    removed_categories TEXT,
     policy_snapshot_id TEXT NOT NULL REFERENCES policies(id),
     created_at TEXT NOT NULL,
     CHECK (
@@ -74,10 +75,14 @@ CREATE TABLE evidence (
 
 CREATE TABLE patches (
     id TEXT PRIMARY KEY,
-    branch_id TEXT NOT NULL REFERENCES branches(id),
+    branch_id TEXT REFERENCES branches(id),
     base_revision INTEGER NOT NULL,
+    core_version INTEGER NOT NULL,
+    policy_snapshot_id TEXT NOT NULL REFERENCES policies(id),
     status TEXT NOT NULL,
     patch_hash TEXT NOT NULL,
+    generator_model_id TEXT NOT NULL,
+    generator_prompt_version TEXT NOT NULL,
     proposed_at TEXT NOT NULL
 );
 
@@ -107,9 +112,17 @@ CREATE TABLE patch_evidence (
 CREATE TABLE audits (
     id TEXT PRIMARY KEY,
     patch_id TEXT NOT NULL REFERENCES patches(id),
-    decision TEXT NOT NULL,
+    patch_hash TEXT NOT NULL,
+    branch_id TEXT REFERENCES branches(id),
+    base_revision INTEGER NOT NULL,
+    core_version INTEGER NOT NULL,
     policy_snapshot_id TEXT NOT NULL REFERENCES policies(id),
-    audited_at TEXT NOT NULL
+    evidence_binding TEXT NOT NULL,
+    decision TEXT NOT NULL,
+    reason_codes TEXT NOT NULL,
+    auditor_model_id TEXT NOT NULL,
+    auditor_prompt_version TEXT NOT NULL,
+    created_at TEXT NOT NULL
 );
 
 CREATE TABLE audit_evidence (
@@ -122,8 +135,12 @@ CREATE TABLE commits (
     id TEXT PRIMARY KEY,
     branch_id TEXT NOT NULL REFERENCES branches(id),
     revision INTEGER NOT NULL,
+    previous_commit_id TEXT REFERENCES commits(id),
     patch_id TEXT NOT NULL UNIQUE REFERENCES patches(id),
+    patch_hash TEXT NOT NULL,
     audit_id TEXT NOT NULL UNIQUE REFERENCES audits(id),
+    core_version INTEGER NOT NULL,
+    policy_snapshot_id TEXT NOT NULL REFERENCES policies(id),
     committed_at TEXT NOT NULL,
     UNIQUE (branch_id, revision)
 );
@@ -131,17 +148,28 @@ CREATE TABLE commits (
 CREATE TABLE memory_records (
     id TEXT PRIMARY KEY,
     domain TEXT NOT NULL,
+    branch_id TEXT REFERENCES branches(id),
     semantic_key TEXT NOT NULL,
+    kind TEXT NOT NULL,
     status TEXT NOT NULL,
+    sensitivity TEXT NOT NULL,
     storage_class TEXT NOT NULL,
     inline_value TEXT,
     payload_id TEXT REFERENCES payload_objects(id),
-    branch_id TEXT REFERENCES branches(id),
+    lifetime TEXT NOT NULL,
+    valid_until TEXT,
+    timezone TEXT,
+    policy_snapshot_id TEXT NOT NULL REFERENCES policies(id),
+    mount_policy_id TEXT REFERENCES mount_policies(id),
     created_by_commit_id TEXT NOT NULL REFERENCES commits(id),
     superseded_by_commit_id TEXT REFERENCES commits(id),
     created_at TEXT NOT NULL,
+    purged_at TEXT,
     CHECK (
         NOT (domain = 'PERSONAL' AND storage_class = 'INLINE_NON_SENSITIVE')
+    ),
+    CHECK (
+        NOT (domain = 'PERSONAL' AND storage_class != 'VAULT_REF')
     )
 );
 
@@ -177,36 +205,70 @@ CREATE TABLE conflict_records (
 
 CREATE TABLE access_leases (
     id TEXT PRIMARY KEY,
-    policy_id TEXT NOT NULL REFERENCES policies(id),
+    record_id TEXT NOT NULL REFERENCES memory_records(id),
+    requested_scope TEXT NOT NULL,
+    active_branch_id TEXT REFERENCES branches(id),
+    policy_snapshot_id TEXT NOT NULL REFERENCES policies(id),
     status TEXT NOT NULL,
-    granted_at TEXT NOT NULL,
-    expires_at TEXT NOT NULL
+    issued_at TEXT NOT NULL,
+    expires_at TEXT NOT NULL,
+    revoked_at TEXT
 );
 
 CREATE TABLE purge_jobs (
     id TEXT PRIMARY KEY,
+    record_id TEXT NOT NULL REFERENCES memory_records(id),
     status TEXT NOT NULL,
     requested_at TEXT NOT NULL,
-    completed_at TEXT
+    started_at TEXT,
+    completed_at TEXT,
+    failure_code TEXT
 );
 
 CREATE TABLE purge_target_results (
     id TEXT PRIMARY KEY,
     job_id TEXT NOT NULL REFERENCES purge_jobs(id),
-    target_type TEXT NOT NULL,
     target_id TEXT NOT NULL,
-    status TEXT NOT NULL
+    purge_attempted BOOLEAN NOT NULL,
+    purge_succeeded BOOLEAN NOT NULL,
+    verify_absent BOOLEAN NOT NULL,
+    last_checked_at TEXT NOT NULL,
+    failure_code TEXT
 );
 
 CREATE TABLE detection_events (
     id TEXT PRIMARY KEY,
-    layer TEXT NOT NULL,
-    outcome TEXT NOT NULL,
-    event_time TEXT NOT NULL
+    run_id TEXT,
+    threat_type TEXT NOT NULL,
+    expected_detection_layer TEXT,
+    actual_detection_layer TEXT,
+    security_outcome TEXT NOT NULL,
+    architectural_outcome TEXT NOT NULL,
+    policy_bypass BOOLEAN NOT NULL,
+    category TEXT,
+    created_at TEXT NOT NULL
 );
 
 CREATE TABLE test_runs (
     id TEXT PRIMARY KEY,
-    suite_version TEXT NOT NULL,
-    run_at TEXT NOT NULL
+    test_id TEXT NOT NULL,
+    run_kind TEXT NOT NULL,
+    spec_version TEXT NOT NULL,
+    technical_design_version TEXT NOT NULL,
+    git_commit TEXT NOT NULL,
+    policy_snapshot_id TEXT REFERENCES policies(id),
+    analyzer_model_id TEXT,
+    generator_model_id TEXT,
+    auditor_model_id TEXT,
+    analyzer_prompt_version TEXT,
+    generator_prompt_version TEXT,
+    auditor_prompt_version TEXT,
+    temperature REAL,
+    seed INTEGER,
+    result TEXT NOT NULL,
+    input_tokens INTEGER,
+    output_tokens INTEGER,
+    latency_ms INTEGER,
+    started_at TEXT NOT NULL,
+    ended_at TEXT
 );

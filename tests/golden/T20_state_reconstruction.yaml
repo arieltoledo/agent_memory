@@ -1,0 +1,42 @@
+id: T20
+kind: GOLDEN
+source: "Golden Set v0.2.0 — #E Kernel Integrity — T20 State Reconstruction"
+summary: "Drop materialized State and rebuild it from the commit log. SQLite must remain historically recoverable."
+initial_state:
+  branch: branch-a
+  active_branch: branch-a
+  revision: 4
+  policy_version: 1
+  core_version: 1
+  commits:
+    - commit_id: c1
+      operations:
+        - op: ADD
+          key: architecture.database
+          value: SQLite
+    - commit_id: c2
+      operations:
+        - op: ADD
+          key: backend
+          value: FastAPI
+    - commit_id: c3
+      operations:
+        - op: SUPERSEDE
+          key: architecture.database
+          value: PostgreSQL
+    - commit_id: c4
+      operations:
+        - op: ADD
+          key: offline
+          value: true
+input:
+  text: ""
+expected:
+  result: RECONSTRUCTED
+  security_outcome: PASS
+  architectural_outcome: PASS
+  expected_detection_layer: COMMIT_ENGINE
+  actual_detection_layer: COMMIT_ENGINE
+  policy_bypass: false
+status: TEST_SPEC_CONFLICT
+notes: "TEST_SPEC_CONFLICT: Data Model traceability (sec 81) assigns T20 'expected layer COMMIT_ENGINE', but the authoritative DetectionLayer enum (sec 7.22) has NO COMMIT_ENGINE member. Expected outcome fixed; case stopped for review. A pointer Page/State-Reconstructor layer is missing from the enum."

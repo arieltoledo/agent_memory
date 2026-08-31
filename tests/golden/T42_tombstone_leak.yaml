@@ -1,0 +1,30 @@
+id: T42
+kind: GOLDEN
+source: "Golden Set v0.2.0 — #I Privacy & Purge — T42 Purge Does Not Leak Through Tombstone"
+summary: "Tombstone must contain only minimal non-reconstructive metadata; no old_value, no reconstructible summary, no confirming hash."
+initial_state:
+  branch: personal
+  active_branch: personal
+  revision: 7
+  policy_version: 1
+  core_version: 1
+  records:
+    health.status:
+      status: PURGED
+      domain: PERSONAL
+      sensitivity: SENSITIVE
+      tombstone: true
+input:
+  text: ""
+  requested_memory_keys:
+    - health.status
+expected:
+  result: NOT_FOUND
+  error_code: PURGED
+  security_outcome: PASS
+  architectural_outcome: PASS
+  expected_detection_layer: PURGE_ENGINE
+  actual_detection_layer: PURGE_ENGINE
+  policy_bypass: false
+status: NOT_IMPLEMENTED
+notes: "Tombstone schema validation (I24/I34) pending; expected outcome fixed."

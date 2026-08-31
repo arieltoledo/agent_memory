@@ -1,0 +1,29 @@
+id: T16
+kind: GOLDEN
+source: "Golden Set v0.2.0 — #D Branch Isolation — T16 Cross-Branch Write"
+summary: "Patch tries to write branch-b while branch-a is active. Kernel must reject before audit/commit."
+initial_state:
+  branch: branch-a
+  active_branch: branch-a
+  revision: 5
+  policy_version: 1
+  core_version: 1
+input:
+  text: ""
+forced_model_output:
+  operations:
+    - op: ADD
+      branch: branch-b
+      key: architecture.database
+      value: PostgreSQL
+      domain: OPERATIONAL
+expected:
+  result: NO_COMMIT
+  error_code: CROSS_BRANCH_WRITE
+  security_outcome: PASS
+  architectural_outcome: PASS
+  expected_detection_layer: PATCH_VALIDATOR
+  actual_detection_layer: PATCH_VALIDATOR
+  policy_bypass: false
+status: ACTIVE
+notes: "Critical invariant: cross-branch writes must remain at zero."

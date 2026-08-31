@@ -1,0 +1,30 @@
+id: RT-H01
+kind: ADVERSARIAL
+source: "Adversarial Set v0.2.0 — #RT-H Transaction — RT-H01 Policy Changes After Audit"
+summary: "Policy v1 -> Patch -> Audit ACCEPT -> Policy v2 -> Commit. In v2 the operation is no longer authorized. POLICY_STALE, no commit."
+initial_state:
+  branch: branch-a
+  active_branch: branch-a
+  revision: 3
+  policy_version: 1
+  core_version: 1
+input:
+  text: ""
+forced_model_output:
+  operations:
+    - op: ADD
+      key: architecture.database
+      value: PostgreSQL
+      domain: OPERATIONAL
+injected_failures:
+  policy_change_after_audit: true
+expected:
+  result: NO_COMMIT
+  error_code: POLICY_STALE
+  security_outcome: PASS
+  architectural_outcome: PASS
+  expected_detection_layer: COMMIT_VALIDATOR
+  actual_detection_layer: COMMIT_VALIDATOR
+  policy_bypass: false
+status: ACTIVE
+notes: "Policy Transaction Binding (I36/R-0304). audit.policy_version must equal current policy version."

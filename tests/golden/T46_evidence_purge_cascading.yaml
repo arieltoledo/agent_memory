@@ -1,0 +1,38 @@
+id: T46
+kind: GOLDEN
+source: "Golden Set v0.2.0 — #L Freeze Amendment — T46 Evidence Purge Cascading"
+summary: "After PURGE, attempt to recover original evidence from State/Evidence/Patches/Audits/Commits/Metrics/Logs/Caches/Vault. Must be 0 recoverable managed copies."
+initial_state:
+  branch: personal
+  active_branch: personal
+  revision: 8
+  policy_version: 1
+  core_version: 1
+  records:
+    health.status:
+      status: PURGE_REVOKED
+      domain: PERSONAL
+      sensitivity: SENSITIVE
+  leases:
+    - lease_id: lease-1
+      record_id: health.status
+      status: VALID
+input:
+  text: ""
+  requested_memory_keys:
+    - health.status
+forced_model_output:
+  operations:
+    - op: PURGE_REQUEST
+      target: health.status
+      reason_code: user_request
+expected:
+  result: PURGE_COMPLETE
+  error_code: null
+  security_outcome: PASS
+  architectural_outcome: PASS
+  expected_detection_layer: PURGE_ENGINE
+  actual_detection_layer: PURGE_ENGINE
+  policy_bypass: false
+status: ACTIVE
+notes: "Erasure closure (I24, I34, I38): all managed representations verified absent."

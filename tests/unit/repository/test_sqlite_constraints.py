@@ -9,39 +9,46 @@ def conn():
     # Insert common data to satisfy FKs
     connection.execute("INSERT INTO branches (id, name, created_at) VALUES ('branch-1', 'main', '2026-08-31T00:00:00Z')")
     connection.execute("INSERT INTO policies (id, version, policy_hash, activated_at) VALUES ('policy-1', 1, 'hash', '2026-08-31T00:00:00Z')")
-    connection.execute("INSERT INTO patches (id, branch_id, base_revision, status, patch_hash, proposed_at) VALUES ('patch-ref', 'branch-1', 0, 'COMMITTED', 'hash0', '2026-08-31T00:00:00Z')")
-    connection.execute("INSERT INTO audits (id, patch_id, decision, policy_snapshot_id, audited_at) VALUES ('audit-ref', 'patch-ref', 'ACCEPT', 'policy-1', '2026-08-31T00:00:00Z')")
-    connection.execute("INSERT INTO commits (id, branch_id, revision, patch_id, audit_id, committed_at) VALUES ('commit-ref', 'branch-1', 0, 'patch-ref', 'audit-ref', '2026-08-31T00:00:00Z')")
+    connection.execute("INSERT INTO patches (id, branch_id, base_revision, core_version, policy_snapshot_id, status, patch_hash, generator_model_id, generator_prompt_version, proposed_at) VALUES ('patch-ref', 'branch-1', 0, 1, 'policy-1', 'COMMITTED', 'hash0', 'model', 'v1', '2026-08-31T00:00:00Z')")
+    connection.execute("INSERT INTO audits (id, patch_id, patch_hash, branch_id, base_revision, core_version, policy_snapshot_id, evidence_binding, decision, reason_codes, auditor_model_id, auditor_prompt_version, created_at) VALUES ('audit-ref', 'patch-ref', 'hash0', 'branch-1', 0, 1, 'policy-1', 'ev', 'ACCEPT', '[]', 'model', 'v1', '2026-08-31T00:00:00Z')")
+    connection.execute("INSERT INTO commits (id, branch_id, revision, patch_id, patch_hash, audit_id, core_version, policy_snapshot_id, committed_at) VALUES ('commit-ref', 'branch-1', 0, 'patch-ref', 'hash0', 'audit-ref', 1, 'policy-1', '2026-08-31T00:00:00Z')")
     yield connection
     connection.close()
 
 def test_patch_rechazado_no_bloquea_nueva_propuesta(conn):
-    # Two patches with same hash
-    conn.execute("INSERT INTO patches (id, branch_id, base_revision, status, patch_hash, proposed_at) VALUES ('patch-1', 'branch-1', 1, 'REJECTED', 'hashX', '2026-08-31T00:00:00Z')")
-    conn.execute("INSERT INTO patches (id, branch_id, base_revision, status, patch_hash, proposed_at) VALUES ('patch-2', 'branch-1', 1, 'PROPOSED', 'hashX', '2026-08-31T00:00:00Z')")
+    conn.execute("INSERT INTO patches (id, branch_id, base_revision, core_version, policy_snapshot_id, status, patch_hash, generator_model_id, generator_prompt_version, proposed_at) VALUES ('patch-1', 'branch-1', 1, 1, 'policy-1', 'REJECTED', 'hashX', 'model', 'v1', '2026-08-31T00:00:00Z')")
+    conn.execute("INSERT INTO patches (id, branch_id, base_revision, core_version, policy_snapshot_id, status, patch_hash, generator_model_id, generator_prompt_version, proposed_at) VALUES ('patch-2', 'branch-1', 1, 1, 'policy-1', 'PROPOSED', 'hashX', 'model', 'v1', '2026-08-31T00:00:00Z')")
     assert conn.execute("SELECT count(*) FROM patches WHERE patch_hash = 'hashX'").fetchone()[0] == 2
 
 def test_replay_fails(conn):
-    conn.execute("INSERT INTO patches (id, branch_id, base_revision, status, patch_hash, proposed_at) VALUES ('patch-1', 'branch-1', 1, 'COMMITTED', 'hash1', '2026-08-31T00:00:00Z')")
-    conn.execute("INSERT INTO audits (id, patch_id, decision, policy_snapshot_id, audited_at) VALUES ('audit-1', 'patch-1', 'ACCEPT', 'policy-1', '2026-08-31T00:00:00Z')")
-    conn.execute("INSERT INTO commits (id, branch_id, revision, patch_id, audit_id, committed_at) VALUES ('commit-1', 'branch-1', 1, 'patch-1', 'audit-1', '2026-08-31T00:00:00Z')")
+    conn.execute("INSERT INTO patches (id, branch_id, base_revision, core_version, policy_snapshot_id, status, patch_hash, generator_model_id, generator_prompt_version, proposed_at) VALUES ('patch-1', 'branch-1', 1, 1, 'policy-1', 'COMMITTED', 'hash1', 'model', 'v1', '2026-08-31T00:00:00Z')")
+    conn.execute("INSERT INTO audits (id, patch_id, patch_hash, branch_id, base_revision, core_version, policy_snapshot_id, evidence_binding, decision, reason_codes, auditor_model_id, auditor_prompt_version, created_at) VALUES ('audit-1', 'patch-1', 'hash1', 'branch-1', 1, 1, 'policy-1', 'ev', 'ACCEPT', '[]', 'model', 'v1', '2026-08-31T00:00:00Z')")
+    conn.execute("INSERT INTO commits (id, branch_id, revision, patch_id, patch_hash, audit_id, core_version, policy_snapshot_id, committed_at) VALUES ('commit-1', 'branch-1', 1, 'patch-1', 'hash1', 'audit-1', 1, 'policy-1', '2026-08-31T00:00:00Z')")
     
     with pytest.raises(sqlite3.IntegrityError):
-        conn.execute("INSERT INTO audits (id, patch_id, decision, policy_snapshot_id, audited_at) VALUES ('audit-2', 'patch-1', 'ACCEPT', 'policy-1', '2026-08-31T00:00:00Z')")
-        conn.execute("INSERT INTO commits (id, branch_id, revision, patch_id, audit_id, committed_at) VALUES ('commit-2', 'branch-1', 2, 'patch-1', 'audit-2', '2026-08-31T00:00:00Z')")
+        conn.execute("INSERT INTO audits (id, patch_id, patch_hash, branch_id, base_revision, core_version, policy_snapshot_id, evidence_binding, decision, reason_codes, auditor_model_id, auditor_prompt_version, created_at) VALUES ('audit-2', 'patch-1', 'hash1', 'branch-1', 1, 1, 'policy-1', 'ev', 'ACCEPT', '[]', 'model', 'v1', '2026-08-31T00:00:00Z')")
+        conn.execute("INSERT INTO commits (id, branch_id, revision, patch_id, patch_hash, audit_id, core_version, policy_snapshot_id, committed_at) VALUES ('commit-2', 'branch-1', 2, 'patch-1', 'hash1', 'audit-2', 1, 'policy-1', '2026-08-31T00:00:00Z')")
 
 def test_personal_inline_fails(conn):
     with pytest.raises(sqlite3.IntegrityError):
         conn.execute("""
-            INSERT INTO memory_records (id, domain, semantic_key, status, storage_class, inline_value, created_by_commit_id, created_at) 
-            VALUES ('record-1', 'PERSONAL', 'key1', 'ACTIVE', 'INLINE_NON_SENSITIVE', 'value', 'commit-ref', '2026-08-31T00:00:00Z')
+            INSERT INTO memory_records (id, domain, semantic_key, kind, status, sensitivity, storage_class, inline_value, lifetime, policy_snapshot_id, created_by_commit_id, created_at) 
+            VALUES ('record-1', 'PERSONAL', 'key1', 'FACT', 'ACTIVE', 'ORDINARY', 'INLINE_NON_SENSITIVE', 'value', 'DURABLE', 'policy-1', 'commit-ref', '2026-08-31T00:00:00Z')
+        """)
+
+def test_personal_vault_ref_enforced(conn):
+    # Personal domain must have storage_class = VAULT_REF
+    with pytest.raises(sqlite3.IntegrityError):
+        conn.execute("""
+            INSERT INTO memory_records (id, domain, semantic_key, kind, status, sensitivity, storage_class, inline_value, lifetime, policy_snapshot_id, created_by_commit_id, created_at) 
+            VALUES ('record-1', 'PERSONAL', 'key1', 'FACT', 'ACTIVE', 'ORDINARY', 'NONE', NULL, 'DURABLE', 'policy-1', 'commit-ref', '2026-08-31T00:00:00Z')
         """)
 
 def test_purged_tombstone(conn):
     conn.execute("INSERT INTO payload_objects (id, purpose, status, sensitivity, created_at) VALUES ('payload-1', 'MEMORY_VALUE', 'DESTROYED', 'PERSONAL', '2026-08-31T00:00:00Z')")
     conn.execute("""
-        INSERT INTO memory_records (id, domain, semantic_key, status, storage_class, payload_id, created_by_commit_id, created_at) 
-        VALUES ('record-1', 'PERSONAL', 'key1', 'PURGED', 'VAULT_REF', 'payload-1', 'commit-ref', '2026-08-31T00:00:00Z')
+        INSERT INTO memory_records (id, domain, semantic_key, kind, status, sensitivity, storage_class, payload_id, lifetime, policy_snapshot_id, created_by_commit_id, created_at) 
+        VALUES ('record-1', 'PERSONAL', 'key1', 'FACT', 'PURGED', 'ORDINARY', 'VAULT_REF', 'payload-1', 'DURABLE', 'policy-1', 'commit-ref', '2026-08-31T00:00:00Z')
     """)
     row = conn.execute("SELECT inline_value, payload_id FROM memory_records WHERE id = 'record-1'").fetchone()
     assert row['inline_value'] is None
@@ -56,22 +63,22 @@ def test_destroyed_payload(conn):
 
 def test_active_key_uniqueness(conn):
     conn.execute("""
-        INSERT INTO memory_records (id, domain, semantic_key, status, storage_class, branch_id, created_by_commit_id, created_at) 
-        VALUES ('record-1', 'OPERATIONAL', 'key1', 'ACTIVE', 'NONE', 'branch-1', 'commit-ref', '2026-08-31T00:00:00Z')
+        INSERT INTO memory_records (id, domain, semantic_key, kind, status, sensitivity, storage_class, branch_id, lifetime, policy_snapshot_id, created_by_commit_id, created_at) 
+        VALUES ('record-1', 'OPERATIONAL', 'key1', 'FACT', 'ACTIVE', 'ORDINARY', 'NONE', 'branch-1', 'DURABLE', 'policy-1', 'commit-ref', '2026-08-31T00:00:00Z')
     """)
     with pytest.raises(sqlite3.IntegrityError):
         conn.execute("""
-            INSERT INTO memory_records (id, domain, semantic_key, status, storage_class, branch_id, created_by_commit_id, created_at) 
-            VALUES ('record-2', 'OPERATIONAL', 'key1', 'ACTIVE', 'NONE', 'branch-1', 'commit-ref', '2026-08-31T00:00:00Z')
+            INSERT INTO memory_records (id, domain, semantic_key, kind, status, sensitivity, storage_class, branch_id, lifetime, policy_snapshot_id, created_by_commit_id, created_at) 
+            VALUES ('record-2', 'OPERATIONAL', 'key1', 'FACT', 'ACTIVE', 'ORDINARY', 'NONE', 'branch-1', 'DURABLE', 'policy-1', 'commit-ref', '2026-08-31T00:00:00Z')
         """)
 
 def test_revisions(conn):
-    conn.execute("INSERT INTO patches (id, branch_id, base_revision, status, patch_hash, proposed_at) VALUES ('patch-1', 'branch-1', 1, 'COMMITTED', 'hash1', '2026-08-31T00:00:00Z')")
-    conn.execute("INSERT INTO audits (id, patch_id, decision, policy_snapshot_id, audited_at) VALUES ('audit-1', 'patch-1', 'ACCEPT', 'policy-1', '2026-08-31T00:00:00Z')")
-    conn.execute("INSERT INTO commits (id, branch_id, revision, patch_id, audit_id, committed_at) VALUES ('commit-1', 'branch-1', 1, 'patch-1', 'audit-1', '2026-08-31T00:00:00Z')")
+    conn.execute("INSERT INTO patches (id, branch_id, base_revision, core_version, policy_snapshot_id, status, patch_hash, generator_model_id, generator_prompt_version, proposed_at) VALUES ('patch-1', 'branch-1', 1, 1, 'policy-1', 'COMMITTED', 'hash1', 'model', 'v1', '2026-08-31T00:00:00Z')")
+    conn.execute("INSERT INTO audits (id, patch_id, patch_hash, branch_id, base_revision, core_version, policy_snapshot_id, evidence_binding, decision, reason_codes, auditor_model_id, auditor_prompt_version, created_at) VALUES ('audit-1', 'patch-1', 'hash1', 'branch-1', 1, 1, 'policy-1', 'ev', 'ACCEPT', '[]', 'model', 'v1', '2026-08-31T00:00:00Z')")
+    conn.execute("INSERT INTO commits (id, branch_id, revision, patch_id, patch_hash, audit_id, core_version, policy_snapshot_id, committed_at) VALUES ('commit-1', 'branch-1', 1, 'patch-1', 'hash1', 'audit-1', 1, 'policy-1', '2026-08-31T00:00:00Z')")
     
-    conn.execute("INSERT INTO patches (id, branch_id, base_revision, status, patch_hash, proposed_at) VALUES ('patch-2', 'branch-1', 1, 'COMMITTED', 'hash2', '2026-08-31T00:00:00Z')")
-    conn.execute("INSERT INTO audits (id, patch_id, decision, policy_snapshot_id, audited_at) VALUES ('audit-2', 'patch-2', 'ACCEPT', 'policy-1', '2026-08-31T00:00:00Z')")
+    conn.execute("INSERT INTO patches (id, branch_id, base_revision, core_version, policy_snapshot_id, status, patch_hash, generator_model_id, generator_prompt_version, proposed_at) VALUES ('patch-2', 'branch-1', 1, 1, 'policy-1', 'COMMITTED', 'hash2', 'model', 'v1', '2026-08-31T00:00:00Z')")
+    conn.execute("INSERT INTO audits (id, patch_id, patch_hash, branch_id, base_revision, core_version, policy_snapshot_id, evidence_binding, decision, reason_codes, auditor_model_id, auditor_prompt_version, created_at) VALUES ('audit-2', 'patch-2', 'hash2', 'branch-1', 1, 1, 'policy-1', 'ev', 'ACCEPT', '[]', 'model', 'v1', '2026-08-31T00:00:00Z')")
     
     with pytest.raises(sqlite3.IntegrityError):
-        conn.execute("INSERT INTO commits (id, branch_id, revision, patch_id, audit_id, committed_at) VALUES ('commit-2', 'branch-1', 1, 'patch-2', 'audit-2', '2026-08-31T00:00:00Z')")
+        conn.execute("INSERT INTO commits (id, branch_id, revision, patch_id, patch_hash, audit_id, core_version, policy_snapshot_id, committed_at) VALUES ('commit-2', 'branch-1', 1, 'patch-2', 'hash2', 'audit-2', 1, 'policy-1', '2026-08-31T00:00:00Z')")

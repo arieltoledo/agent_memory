@@ -1,0 +1,35 @@
+id: T22
+kind: GOLDEN
+source: "Golden Set v0.2.0 — #E Kernel Integrity — T22 Ghost Supersede"
+summary: "MongoDB was never active; supersede MongoDB->PostgreSQL while SQLite is active. TARGET_NOT_ACTIVE; SQLite remains active."
+initial_state:
+  branch: branch-a
+  active_branch: branch-a
+  revision: 3
+  policy_version: 1
+  core_version: 1
+  records:
+    architecture.database:
+      value: SQLite
+      status: ACTIVE
+    architecture.other:
+      value: MongoDB
+      status: RETRACTED
+input:
+  text: ""
+forced_model_output:
+  operations:
+    - op: SUPERSEDE
+      target: architecture.other
+      key: architecture.database
+      value: PostgreSQL
+expected:
+  result: NO_COMMIT
+  error_code: TARGET_NOT_ACTIVE
+  security_outcome: PASS
+  architectural_outcome: PASS
+  expected_detection_layer: PATCH_VALIDATOR
+  actual_detection_layer: PATCH_VALIDATOR
+  policy_bypass: false
+status: ACTIVE
+notes: "A non-active target cannot be superseded (I11). SQLite stays active."

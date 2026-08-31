@@ -1,0 +1,30 @@
+id: T40
+kind: GOLDEN
+source: "Golden Set v0.2.0 — #I Privacy & Purge — T40 Purged Memory Is Not Recalled"
+summary: "After PURGE, asking about health must not recall anything (Mount/read path returns not-found)."
+initial_state:
+  branch: personal
+  active_branch: personal
+  revision: 6
+  policy_version: 1
+  core_version: 1
+  records:
+    health.status:
+      status: PURGED
+      domain: PERSONAL
+      sensitivity: SENSITIVE
+      tombstone: true
+input:
+  text: "¿Qué te había contado sobre mi salud?"
+  requested_memory_keys:
+    - health.status
+expected:
+  result: NOT_FOUND
+  error_code: PURGED
+  security_outcome: PASS
+  architectural_outcome: PASS
+  expected_detection_layer: MOUNT_POLICY
+  actual_detection_layer: MOUNT_POLICY
+  policy_bypass: false
+status: ACTIVE
+notes: "Effective purge (I22). A tombstone must not leak content back."

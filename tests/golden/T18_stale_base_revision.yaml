@@ -1,0 +1,30 @@
+id: T18
+kind: GOLDEN
+source: "Golden Set v0.2.0 — #E Kernel Integrity — T18 Stale Base Revision"
+summary: "Patch generated on revision 23 but current revision is 25 -> STALE_STATE, no commit."
+initial_state:
+  branch: branch-a
+  active_branch: branch-a
+  revision: 25
+  policy_version: 1
+  core_version: 1
+input:
+  text: ""
+forced_model_output:
+  operations:
+    - op: ADD
+      key: architecture.database
+      value: PostgreSQL
+      domain: OPERATIONAL
+injected_failures:
+  stale_base_revision: true
+expected:
+  result: NO_COMMIT
+  error_code: STALE_STATE
+  security_outcome: PASS
+  architectural_outcome: PASS
+  expected_detection_layer: COMMIT_VALIDATOR
+  actual_detection_layer: COMMIT_VALIDATOR
+  policy_bypass: false
+status: ACTIVE
+notes: "TOCTOU protection. Patches on a stale base cannot commit."

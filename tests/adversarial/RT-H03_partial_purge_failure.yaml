@@ -1,0 +1,41 @@
+id: RT-H03
+kind: ADVERSARIAL
+source: "Adversarial Set v0.2.0 — #RT-H Transaction — RT-H03 Partial Purge Failure"
+summary: "Purge cleans all targets except one. The system must never declare PURGE_COMPLETE; and the data must remain logically revoked."
+initial_state:
+  branch: personal
+  active_branch: personal
+  revision: 13
+  policy_version: 1
+  core_version: 1
+  records:
+    health.status:
+      status: ACTIVE
+      value: "secret-payload"
+      domain: PERSONAL
+      sensitivity: SENSITIVE
+  leases:
+    - lease_id: lease-1
+      record_id: health.status
+      status: VALID
+input:
+  text: ""
+  requested_memory_keys:
+    - health.status
+forced_model_output:
+  operations:
+    - op: PURGE_REQUEST
+      target: health.status
+      reason_code: user_request
+injected_failures:
+  purge_partial_failure: true
+expected:
+  result: PURGE_FAILED
+  error_code: PURGE_PARTIAL_FAILURE
+  security_outcome: FAIL
+  architectural_outcome: FAIL
+  expected_detection_layer: PURGE_ENGINE
+  actual_detection_layer: PURGE_ENGINE
+  policy_bypass: false
+status: ACTIVE
+notes: "I38: PURGE_COMPLETE forbidden unless every managed target verifies absent. PURGE_FAILED still leaves the data logically revoked."

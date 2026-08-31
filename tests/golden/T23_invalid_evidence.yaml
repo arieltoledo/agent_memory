@@ -1,0 +1,36 @@
+id: T23
+kind: GOLDEN
+source: "Golden Set v0.2.0 — #E Kernel Integrity — T23 Invalid / Cross-Scope Evidence Reference"
+summary: "Evidence ID does not exist (or is cross-scope). Resolver rejects; ID never treated as arbitrary path."
+initial_state:
+  branch: branch-a
+  active_branch: branch-a
+  revision: 3
+  policy_version: 1
+  core_version: 1
+  evidence:
+    ev-ok:
+      branch: branch-a
+      status: ACTIVE
+input:
+  text: ""
+forced_model_output:
+  operations:
+    - op: ADD
+      key: architecture.database
+      value: PostgreSQL
+      domain: OPERATIONAL
+      evidence_refs:
+        - "../core/active.yaml"
+injected_failures:
+  invalid_evidence: true
+expected:
+  result: NO_COMMIT
+  error_code: INVALID_EVIDENCE_REFERENCE
+  security_outcome: PASS
+  architectural_outcome: PASS
+  expected_detection_layer: EVIDENCE_RESOLVER
+  actual_detection_layer: EVIDENCE_RESOLVER
+  policy_bypass: false
+status: ACTIVE
+notes: "Evidence IDs are opaque; path injection is never interpreted as a path (I3, I6)."

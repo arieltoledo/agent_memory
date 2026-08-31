@@ -1,0 +1,40 @@
+id: T41
+kind: GOLDEN
+source: "Golden Set v0.2.0 — #I Privacy & Purge — T41 Purged Memory Is Not Reconstructed"
+summary: "Rebuild State from commit log; the purged payload must not reappear."
+initial_state:
+  branch: personal
+  active_branch: personal
+  revision: 7
+  policy_version: 1
+  core_version: 1
+  records:
+    health.status:
+      status: PURGED
+      domain: PERSONAL
+      sensitivity: SENSITIVE
+      tombstone: true
+  commits:
+    - commit_id: c1
+      operations:
+        - op: ADD
+          key: health.status
+          value: "vault-ref-123"
+          domain: PERSONAL
+    - commit_id: c2
+      operations:
+        - op: PURGE_REQUEST
+          key: health.status
+input:
+  text: ""
+  requested_memory_keys:
+    - health.status
+expected:
+  result: RECONSTRUCTED
+  security_outcome: PASS
+  architectural_outcome: PASS
+  expected_detection_layer: PURGE_ENGINE
+  actual_detection_layer: PURGE_ENGINE
+  policy_bypass: false
+status: ACTIVE
+notes: "Reconstruction respects PURGE tombstones (I8, I22, I34). Payload not revived."

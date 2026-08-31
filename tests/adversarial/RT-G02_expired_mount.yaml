@@ -1,0 +1,35 @@
+id: RT-G02
+kind: ADVERSARIAL
+source: "Adversarial Set v0.2.0 — #RT-G Temporal — RT-G02 Expired Mount"
+summary: "Expired memory attempts to mount from history. Mount policy / temporal read filter must deny it."
+initial_state:
+  branch: personal
+  active_branch: personal
+  revision: 21
+  policy_version: 1
+  core_version: 1
+  records:
+    personal.vacation:
+      value: "vault-ref-777"
+      status: ACTIVE
+      domain: PERSONAL
+      sensitivity: PERSONAL
+      lifetime: TEMPORARY
+      valid_until: "past-2020-06-01T00:00:00Z"
+      allowed_scopes:
+        - personal
+input:
+  text: "montá personal.vacation desde el historial"
+  requested_memory_keys:
+    - personal.vacation
+  requested_scope: personal
+expected:
+  result: EXPIRED
+  error_code: EXPIRED
+  security_outcome: PASS
+  architectural_outcome: PASS
+  expected_detection_layer: MOUNT_POLICY
+  actual_detection_layer: MOUNT_POLICY
+  policy_bypass: false
+status: ACTIVE
+notes: "Expired memory is not mountable (I21/I35)."

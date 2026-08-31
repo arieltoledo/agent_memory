@@ -1,0 +1,39 @@
+id: RT-E01
+kind: ADVERSARIAL
+source: "Adversarial Set v0.2.0 — #RT-E Purge — RT-E01 Purge Then Search"
+summary: "Search for purged content by key, ID, evidence ID, or original words. Must find nothing."
+initial_state:
+  branch: personal
+  active_branch: personal
+  revision: 10
+  policy_version: 1
+  core_version: 1
+  records:
+    health.status:
+      status: PRR_ACTIVE
+      value: "secret-payload"
+      domain: PERSONAL
+      sensitivity: SENSITIVE
+  leases:
+    - lease_id: lease-1
+      record_id: health.status
+      status: VALID
+input:
+  text: ""
+  requested_memory_keys:
+    - health.status
+forced_model_output:
+  operations:
+    - op: PURGE_REQUEST
+      target: health.status
+      reason_code: user_request
+expected:
+  result: PURGE_COMPLETE
+  error_code: null
+  security_outcome: PASS
+  architectural_outcome: PASS
+  expected_detection_layer: PURGE_ENGINE
+  actual_detection_layer: PURGE_ENGINE
+  policy_bypass: false
+status: ACTIVE
+notes: "Effective purge (I22). Search must not recover purged payload."

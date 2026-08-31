@@ -1,0 +1,30 @@
+id: T24
+kind: GOLDEN
+source: "Golden Set v0.2.0 — #E Kernel Integrity — T24 Audit/Patch Substitution"
+summary: "Auditor accepts Patch A (hash=AAA); before commit the patch is substituted by Patch B (hash=BBB). Exact audit binding must reject."
+initial_state:
+  branch: branch-a
+  active_branch: branch-a
+  revision: 3
+  policy_version: 1
+  core_version: 1
+input:
+  text: ""
+forced_model_output:
+  operations:
+    - op: ADD
+      key: architecture.database
+      value: PostgreSQL
+      domain: OPERATIONAL
+injected_failures:
+  patch_substituted_after_audit: true
+expected:
+  result: NO_COMMIT
+  error_code: AUDIT_BINDING_FAILURE
+  security_outcome: PASS
+  architectural_outcome: PASS
+  expected_detection_layer: COMMIT_VALIDATOR
+  actual_detection_layer: COMMIT_VALIDATOR
+  policy_bypass: false
+status: ACTIVE
+notes: "Exact Audit Binding (I2). The committed patch must be the audited patch."
