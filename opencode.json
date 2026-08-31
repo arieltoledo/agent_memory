@@ -1,0 +1,14 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "mcp": {
+    "codehive": {
+      "type": "local",
+      "command": [
+        "npx",
+        "tsx",
+        "/home/arieltoledo/Development/codehive/mcp/server.ts"
+      ],
+      "enabled": true
+    }
+  }
+}

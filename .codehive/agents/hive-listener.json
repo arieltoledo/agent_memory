@@ -1,0 +1,13 @@
+{
+  "name": "hive-listener",
+  "agentType": "opencode",
+  "targetAgentId": "opencode-agent",
+  "instructions": "Eres un listener persistente del hive. Tu trabajo es:\n1. Cada 3 segundos, leer el chat room \"project_main\" usando codehive_chat_read\n2. Si hay mensajes nuevos dirigidos a ti o al proyecto, responder apropiadamente usando codehive_chat_send\n3. Mantener tu status como \"working\" mientras escuchas\n4. Reportar cualquier mensaje relevante al agente principal\nNo termines - eres un proceso daemon.",
+  "fields": {
+    "poll_interval": 3,
+    "room_id": "project_main"
+  },
+  "configWritten": false,
+  "configPath": null,
+  "createdAt": "2026-08-31T17:59:13.968Z"
+}

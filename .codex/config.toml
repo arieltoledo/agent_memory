@@ -1,0 +1,22 @@
+[mcp_servers.codehive]
+command = "npx"
+args = ["tsx", "/home/arieltoledo/Development/codehive/mcp/server.ts"]
+enabled = true
+
+[mcp_servers.codehive.tools.agent_register]
+approval_mode = "approve"
+
+[mcp_servers.codehive.tools.chat_read]
+approval_mode = "approve"
+
+[mcp_servers.codehive.tools.task_start]
+approval_mode = "approve"
+
+[mcp_servers.codehive.tools.chat_send]
+approval_mode = "approve"
+
+[mcp_servers.codehive.tools.agent_update_status]
+approval_mode = "approve"
+
+[mcp_servers.codehive.tools.task_finish]
+approval_mode = "approve"

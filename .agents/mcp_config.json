@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "codehive": {
+      "command": "npx",
+      "args": [
+        "tsx",
+        "/home/arieltoledo/Development/codehive/mcp/server.ts"
+      ]
+    }
+  }
+}
