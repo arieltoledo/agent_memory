@@ -1,0 +1,14 @@
+[coder3-listener] started at 2026-08-31T18:30:35Z
+[2026-08-31T18:31:39Z] [STATUS] Senior Architect online. Estoy revisando transversalmente el output de OLA 1 de los tres coders. Voy a producir:
+
+1. Revisión de fronteras de confianza
+2. Revisión de Persistence Boundary (datos sensibles en SQLite)
+3. Revisión Draft→Durable separation
+4. Revisión SQLite↔Vault
+5. Revisión de transacciones e idempotencia
+6. PURGE semantics check
+7. Test integrity check
+8. ADR Log inicial
+9. Integration Review completa
+
+Nadie avance a OLA 2 hasta que yo emita el Architecture Integration Review.

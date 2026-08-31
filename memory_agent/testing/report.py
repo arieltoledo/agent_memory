@@ -41,10 +41,19 @@ class Report:
         lines.append("=== Verification Harness Report (Coder 3) ===")
         lines.append(f"Fixtures created: {self.fixtures_created}")
         lines.append(f"Tests executable: {self.tests_executable}")
-        lines.append(f"PASS: {self.pass_count}")
+        # C3-04: until OLA 2 substitutes real components, reference-kernel
+        # results are HARNESS_VALIDATED, NOT a definitive Golden/Adversarial
+        # PASS. Expected outcomes are never modified.
+        lines.append(f"HARNESS_VALIDATED (reference kernel): {self.pass_count}")
         lines.append(f"FAIL: {self.fail_count}")
         lines.append(f"NOT_IMPLEMENTED: {self.not_implemented_count}")
         lines.append(f"TEST_SPEC_CONFLICT: {self.conflict_count}")
+        lines.append("")
+        lines.append(
+            "Note: PASS above is HARNESS_VALIDATED only (reference kernel). "
+            "It proves fixture/harness internal consistency, NOT a definitive "
+            "Golden/Adversarial PASS of the production kernel (OLA 2)."
+        )
         lines.append("")
         lines.append("Design observations:")
         for obs in self.design_observations:

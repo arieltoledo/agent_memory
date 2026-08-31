@@ -104,6 +104,12 @@ class MemoryRecord(PersistentModel):
     record_id: UUID; domain: MemoryDomain; branch_id: UUID | None; semantic_key: str; kind: SemanticType; status: RecordStatus; sensitivity: Sensitivity; storage_class: ValueStorageClass; inline_value: JsonValue | None; payload_ref: UUID | None; lifetime: Lifetime; valid_until: datetime | None; timezone: str | None; policy_snapshot_id: UUID; mount_policy_id: UUID | None; created_commit_id: UUID; supersedes_record_id: UUID | None; created_at: datetime; purged_at: datetime | None
     @model_validator(mode="after")
     def _memory_storage(self):
+        if self.storage_class == ValueStorageClass.INLINE_NON_SENSITIVE and (self.inline_value is None or self.payload_ref is not None):
+            raise DomainValidationError("inline memory requires inline_value and no payload_ref")
+        if self.storage_class == ValueStorageClass.VAULT_REF and (self.payload_ref is None or self.inline_value is not None):
+            raise DomainValidationError("vault memory requires payload_ref and no inline_value")
+        if self.storage_class == ValueStorageClass.NONE and (self.inline_value is not None or self.payload_ref is not None):
+            raise DomainValidationError("NONE memory cannot retain a value reference")
         if self.sensitivity == Sensitivity.PROHIBITED: raise DomainValidationError("prohibited memory is never durable")
         if self.domain == MemoryDomain.PERSONAL and (self.storage_class != ValueStorageClass.VAULT_REF or self.payload_ref is None or self.inline_value is not None): raise DomainValidationError("personal memory must be vault-backed")
         if self.status == RecordStatus.PURGED and self.domain == MemoryDomain.PERSONAL and self.inline_value is not None: raise DomainValidationError("purged tombstones cannot retain inline values")

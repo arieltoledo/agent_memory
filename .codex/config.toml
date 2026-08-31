@@ -20,3 +20,12 @@ approval_mode = "approve"
 
 [mcp_servers.codehive.tools.task_finish]
 approval_mode = "approve"
+
+[mcp_servers.codehive.tools.traceability_claim_file]
+approval_mode = "approve"
+
+[mcp_servers.codehive.tools.memory_publish]
+approval_mode = "approve"
+
+[mcp_servers.codehive.tools.traceability_release_file]
+approval_mode = "approve"

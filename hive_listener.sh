@@ -1,20 +1,21 @@
-#!/bin/bash
-# Hive listener - monitors chat and responds as opencode-agent
+#!/usr/bin/env bash
+# CodeHive listener for this repository. Run with: ./hive_listener.sh &
+set -euo pipefail
 
-PROJECT_ID="memory_project"
-AGENT_ID="opencode-agent"
-ROOM_ID="project_main"
-LAST_MSG_FILE="/tmp/hive_last_msg_$$"
+project_id="memory-project"
+listener=".agents/skills/codehive-protocol/listener.js"
+runtime_dir=".codehive/runtime"
+log_file="${runtime_dir}/listener.log"
+latest_file="${runtime_dir}/latest-message.txt"
 
-echo "Starting hive listener for $AGENT_ID..."
+mkdir -p "${runtime_dir}"
 
 while true; do
-    # Read latest messages
-    RESPONSE=$(curl -s -X POST "http://localhost:3000/api/chat/read" \
-        -H "Content-Type: application/json" \
-        -d "{\"projectId\":\"$PROJECT_ID\",\"room_id\":\"$ROOM_ID\",\"limit\":10}")
-    
-    # Extract messages (simplified - in reality would parse JSON)
-    # For now, just sleep and check
-    sleep 2
+  message="$(PROJECT_ID="${project_id}" node "${listener}" 2>&1 || true)"
+
+  if [[ -n "${message}" ]]; then
+    printf '%s\n' "${message}" | tee -a "${log_file}" > "${latest_file}"
+  fi
+
+  sleep 1
 done
