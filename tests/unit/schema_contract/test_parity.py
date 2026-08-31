@@ -251,3 +251,119 @@ def test_parity_evidence_prohibited_impossible(conn):
             uuid.uuid4().hex, "GLOBAL", None, "PROHIBITED",
             "NONE", None, None, NOW)),
     )
+
+
+# ---------------------------------------------------------------------------
+# Final Closure Specific Parity Tests (P0-01, P0-02, P1-01)
+# ---------------------------------------------------------------------------
+
+def test_parity_operational_sensitive_never_inline(conn):
+    """P0-01: OPERATIONAL + SENSITIVE must be VAULT_REF, never INLINE."""
+    _assert_parity(
+        "OPERATIONAL+SENSITIVE+INLINE",
+        conn,
+        # positive: OPERATIONAL + SENSITIVE + VAULT_REF
+        _pyd_accepts(lambda: _mk_record(
+            ValueStorageClass.VAULT_REF,
+            domain=MemoryDomain.OPERATIONAL,
+            sensitivity=Sensitivity.SENSITIVE,
+            payload_ref=uuid.uuid4(),
+        )),
+        _sql_accepts(conn, MEMREC_SQL, (
+            uuid.uuid4().hex, "OPERATIONAL", "SENSITIVE",
+            "VAULT_REF", None, "payload-1", NOW,
+        )),
+        # negative: OPERATIONAL + SENSITIVE + INLINE
+        _pyd_accepts(lambda: _mk_record(
+            ValueStorageClass.INLINE_NON_SENSITIVE,
+            domain=MemoryDomain.OPERATIONAL,
+            sensitivity=Sensitivity.SENSITIVE,
+            inline="sensitive_data",
+        )),
+        _sql_accepts(conn, MEMREC_SQL, (
+            uuid.uuid4().hex, "OPERATIONAL", "SENSITIVE",
+            "INLINE_NON_SENSITIVE", "{\"leak\":1}", None, NOW,
+        )),
+    )
+
+
+def test_parity_prohibited_payload_impossible(conn):
+    """P0-02: PROHIBITED cannot be stored as a durable PayloadObject."""
+    _assert_parity(
+        "PayloadObject PROHIBITED",
+        conn,
+        # positive: SENSITIVE sensitivity
+        _pyd_accepts(lambda: PayloadObject(
+            payload_id=uuid.uuid4(), purpose="MEMORY_VALUE", status=PayloadStatus.ACTIVE,
+            sensitivity=Sensitivity.SENSITIVE, key_handle="kh", ciphertext_location="loc",
+            created_at=NOW_DT, activated_at=NOW_DT, destroyed_at=None,
+        )),
+        _sql_accepts(conn, PAYLOAD_SQL, (
+            uuid.uuid4().hex, "ACTIVE", "kh", "loc", NOW, None,
+        )),
+        # negative: PROHIBITED sensitivity
+        _pyd_accepts(lambda: PayloadObject(
+            payload_id=uuid.uuid4(), purpose="MEMORY_VALUE", status=PayloadStatus.ACTIVE,
+            sensitivity=Sensitivity.PROHIBITED, key_handle="kh", ciphertext_location="loc",
+            created_at=NOW_DT, activated_at=NOW_DT, destroyed_at=None,
+        )),
+        _sql_accepts(conn,
+            "INSERT INTO payload_objects (id, purpose, status, sensitivity, key_handle, ciphertext_location, created_at) "
+            "VALUES (?, 'MEMORY_VALUE', 'ACTIVE', 'PROHIBITED', 'kh', 'loc', ?)",
+            (uuid.uuid4().hex, NOW),
+        ),
+    )
+
+
+def test_parity_payload_lifecycle_partial_rejected(conn):
+    """P1-01: Partial lifecycle state rejections on both Pydantic and SQLite."""
+    # Positive control: ACTIVE with both keys
+    assert _pyd_accepts(lambda: PayloadObject(
+        payload_id=uuid.uuid4(), purpose="MEMORY_VALUE", status=PayloadStatus.ACTIVE,
+        sensitivity=Sensitivity.ORDINARY, key_handle="kh", ciphertext_location="loc",
+        created_at=NOW_DT, activated_at=None, destroyed_at=None,
+    ))
+    assert _sql_accepts(conn, PAYLOAD_SQL, (
+        uuid.uuid4().hex, "ACTIVE", "kh", "loc", NOW, None,
+    ))
+
+    # Partial Case 1: STAGED with key_handle != None, loc == None
+    assert not _pyd_accepts(lambda: PayloadObject(
+        payload_id=uuid.uuid4(), purpose="MEMORY_VALUE", status=PayloadStatus.STAGED,
+        sensitivity=Sensitivity.ORDINARY, key_handle="kh", ciphertext_location=None,
+        created_at=NOW_DT, activated_at=None, destroyed_at=None,
+    ))
+    assert not _sql_accepts(conn, PAYLOAD_SQL, (
+        uuid.uuid4().hex, "STAGED", "kh", None, NOW, None,
+    ))
+
+    # Partial Case 2: STAGED with key_handle == None, loc != None
+    assert not _pyd_accepts(lambda: PayloadObject(
+        payload_id=uuid.uuid4(), purpose="MEMORY_VALUE", status=PayloadStatus.STAGED,
+        sensitivity=Sensitivity.ORDINARY, key_handle=None, ciphertext_location="loc",
+        created_at=NOW_DT, activated_at=None, destroyed_at=None,
+    ))
+    assert not _sql_accepts(conn, PAYLOAD_SQL, (
+        uuid.uuid4().hex, "STAGED", None, "loc", NOW, None,
+    ))
+
+    # Partial Case 3: DESTROYED with key_handle != None, loc == None
+    assert not _pyd_accepts(lambda: PayloadObject(
+        payload_id=uuid.uuid4(), purpose="MEMORY_VALUE", status=PayloadStatus.DESTROYED,
+        sensitivity=Sensitivity.ORDINARY, key_handle="kh", ciphertext_location=None,
+        created_at=NOW_DT, activated_at=NOW_DT, destroyed_at=NOW_DT,
+    ))
+    assert not _sql_accepts(conn, PAYLOAD_SQL, (
+        uuid.uuid4().hex, "DESTROYED", "kh", None, NOW, NOW,
+    ))
+
+    # Partial Case 4: DESTROYED with key_handle == None, loc != None
+    assert not _pyd_accepts(lambda: PayloadObject(
+        payload_id=uuid.uuid4(), purpose="MEMORY_VALUE", status=PayloadStatus.DESTROYED,
+        sensitivity=Sensitivity.ORDINARY, key_handle=None, ciphertext_location="loc",
+        created_at=NOW_DT, activated_at=NOW_DT, destroyed_at=NOW_DT,
+    ))
+    assert not _sql_accepts(conn, PAYLOAD_SQL, (
+        uuid.uuid4().hex, "DESTROYED", None, "loc", NOW, NOW,
+    ))
+

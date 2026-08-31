@@ -44,3 +44,128 @@ def test_restriction_span_is_nonempty():
 
 def test_persistent_datetimes_must_be_aware():
     with pytest.raises(ValidationError): record(created_at=datetime.now())
+
+
+def test_operational_sensitive_memory_is_never_inline():
+    # SENSITIVE + INLINE in OPERATIONAL domain must be REJECTED
+    with pytest.raises(ValidationError):
+        record(
+            domain=MemoryDomain.OPERATIONAL,
+            branch_id=uuid4(),
+            sensitivity=Sensitivity.SENSITIVE,
+            storage_class=ValueStorageClass.INLINE_NON_SENSITIVE,
+            inline_value="sensitive_data",
+            payload_ref=None,
+        )
+
+
+def test_operational_sensitive_vault_accepted():
+    # positive control: SENSITIVE + VAULT_REF in OPERATIONAL domain must be ACCEPTED
+    rec = record(
+        domain=MemoryDomain.OPERATIONAL,
+        branch_id=uuid4(),
+        sensitivity=Sensitivity.SENSITIVE,
+        storage_class=ValueStorageClass.VAULT_REF,
+        inline_value=None,
+        payload_ref=uuid4(),
+    )
+    assert rec.sensitivity == Sensitivity.SENSITIVE
+    assert rec.storage_class == ValueStorageClass.VAULT_REF
+
+
+def test_prohibited_payload_object_rejected():
+    from memory_agent.domain.models import PayloadObject
+    from memory_agent.domain.enums import PayloadStatus
+    # PROHIBITED PayloadObject must be REJECTED
+    with pytest.raises(ValidationError):
+        PayloadObject(
+            payload_id=uuid4(),
+            purpose="MEMORY_VALUE",
+            status=PayloadStatus.ACTIVE,
+            sensitivity=Sensitivity.PROHIBITED,
+            key_handle="k1",
+            ciphertext_location="loc1",
+            created_at=now(),
+            activated_at=now(),
+            destroyed_at=None,
+        )
+
+
+def test_sensitive_payload_object_accepted():
+    from memory_agent.domain.models import PayloadObject
+    from memory_agent.domain.enums import PayloadStatus
+    # Positive control: SENSITIVE PayloadObject is ACCEPTED
+    p = PayloadObject(
+        payload_id=uuid4(),
+        purpose="MEMORY_VALUE",
+        status=PayloadStatus.ACTIVE,
+        sensitivity=Sensitivity.SENSITIVE,
+        key_handle="k1",
+        ciphertext_location="loc1",
+        created_at=now(),
+        activated_at=now(),
+        destroyed_at=None,
+    )
+    assert p.sensitivity == Sensitivity.SENSITIVE
+
+
+def test_payload_object_lifecycle_four_partial_cases():
+    from memory_agent.domain.models import PayloadObject
+    from memory_agent.domain.enums import PayloadStatus
+
+    # Case 1: STAGED with key_handle != None, ciphertext_location == None -> REJECT
+    with pytest.raises(ValidationError):
+        PayloadObject(
+            payload_id=uuid4(),
+            purpose="MEMORY_VALUE",
+            status=PayloadStatus.STAGED,
+            sensitivity=Sensitivity.ORDINARY,
+            key_handle="k1",
+            ciphertext_location=None,
+            created_at=now(),
+            activated_at=None,
+            destroyed_at=None,
+        )
+
+    # Case 2: STAGED with key_handle == None, ciphertext_location != None -> REJECT
+    with pytest.raises(ValidationError):
+        PayloadObject(
+            payload_id=uuid4(),
+            purpose="MEMORY_VALUE",
+            status=PayloadStatus.STAGED,
+            sensitivity=Sensitivity.ORDINARY,
+            key_handle=None,
+            ciphertext_location="loc1",
+            created_at=now(),
+            activated_at=None,
+            destroyed_at=None,
+        )
+
+    # Case 3: DESTROYED with key_handle != None, ciphertext_location == None -> REJECT
+    with pytest.raises(ValidationError):
+        PayloadObject(
+            payload_id=uuid4(),
+            purpose="MEMORY_VALUE",
+            status=PayloadStatus.DESTROYED,
+            sensitivity=Sensitivity.ORDINARY,
+            key_handle="k1",
+            ciphertext_location=None,
+            created_at=now(),
+            activated_at=now(),
+            destroyed_at=now(),
+        )
+
+    # Case 4: DESTROYED with key_handle == None, ciphertext_location != None -> REJECT
+    with pytest.raises(ValidationError):
+        PayloadObject(
+            payload_id=uuid4(),
+            purpose="MEMORY_VALUE",
+            status=PayloadStatus.DESTROYED,
+            sensitivity=Sensitivity.ORDINARY,
+            key_handle=None,
+            ciphertext_location="loc1",
+            created_at=now(),
+            activated_at=now(),
+            destroyed_at=now(),
+        )
+

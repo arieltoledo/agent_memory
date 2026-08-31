@@ -259,3 +259,54 @@ def test_same_patch_id_committed_twice_rejected_with_positive_control(conn):
         "audit_id, core_version, policy_snapshot_id, committed_at) "
         "VALUES ('commit-rep2', 'branch-1', 2, NULL, 'patch-rep', 'hashR', 'audit-other', 0, 'policy-1', '2026-08-31T00:00:00Z')"
     )
+
+
+# ---------------------------------------------------------------------------
+# Final Closure Specific Persistence Attacks (P0-01, P0-02, P1-01)
+# ---------------------------------------------------------------------------
+
+def test_operational_sensitive_inline_rejected_with_positive_control(conn):
+    """P0-01: SENSITIVE Memory MUST be VAULT_REF, never INLINE."""
+    # Positive control: OPERATIONAL + SENSITIVE + VAULT_REF with payload_id ACCEPTS
+    expect_accept(conn, MEMREC, (
+        "rec-op-sens-vault", "OPERATIONAL", "sens-vault-key", "SENSITIVE",
+        "VAULT_REF", None, "payload-1",
+    ))
+    # Negative: OPERATIONAL + SENSITIVE + INLINE rejected (CHECK constraint)
+    expect_reject(conn, MEMREC, (
+        "rec-op-sens-inline", "OPERATIONAL", "sens-inline-key", "SENSITIVE",
+        "INLINE_NON_SENSITIVE", "{\"leak\":\"plaintext\"}", None,
+    ))
+
+
+def test_prohibited_payload_rejected_with_positive_control(conn):
+    """P0-02: PROHIBITED cannot be stored as a durable PayloadObject."""
+    # Positive control: SENSITIVE PayloadObject ACCEPTS
+    expect_accept(conn, PAYLOAD, ("payload-sens-ok", "ACTIVE", "kh", "loc", None))
+    # Negative: PROHIBITED PayloadObject rejected (CHECK constraint)
+    expect_reject(
+        conn,
+        "INSERT INTO payload_objects (id, purpose, status, sensitivity, key_handle, ciphertext_location, created_at) "
+        "VALUES ('payload-prohibited', 'MEMORY_VALUE', 'ACTIVE', 'PROHIBITED', 'kh', 'loc', '2026-08-31T00:00:00Z')"
+    )
+
+
+def test_payload_lifecycle_partial_states_rejected_with_positive_controls(conn):
+    """P1-01: Payload lifecycle must enforce exact 4 partial state rejections."""
+    # Positive control: ACTIVE with both key_handle and location ACCEPTS
+    expect_accept(conn, PAYLOAD, ("payload-active-full", "ACTIVE", "kh1", "loc1", None))
+    # Positive control: DESTROYED with both null ACCEPTS
+    expect_accept(conn, PAYLOAD, ("payload-dest-full", "DESTROYED", None, None, "2026-08-31T00:00:00Z"))
+
+    # Partial Case 1: STAGED with key_handle != NULL, location == NULL -> REJECT
+    expect_reject(conn, PAYLOAD, ("p-staged-noloc", "STAGED", "kh", None, None))
+
+    # Partial Case 2: STAGED with key_handle == NULL, location != NULL -> REJECT
+    expect_reject(conn, PAYLOAD, ("p-staged-nokey", "STAGED", None, "loc", None))
+
+    # Partial Case 3: DESTROYED with key_handle != NULL, location == NULL -> REJECT
+    expect_reject(conn, PAYLOAD, ("p-dest-haskey", "DESTROYED", "kh", None, "2026-08-31T00:00:00Z"))
+
+    # Partial Case 4: DESTROYED with key_handle == NULL, location != NULL -> REJECT
+    expect_reject(conn, PAYLOAD, ("p-dest-hasloc", "DESTROYED", None, "loc", "2026-08-31T00:00:00Z"))
+

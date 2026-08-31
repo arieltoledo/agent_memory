@@ -19,8 +19,8 @@ CREATE TABLE core_snapshots (
 CREATE TABLE branches (
     branch_id TEXT PRIMARY KEY,
     name TEXT NOT NULL UNIQUE,
-    status TEXT NOT NULL,
-    current_revision INTEGER NOT NULL,
+    status TEXT NOT NULL CHECK (status IN ('ACTIVE', 'ARCHIVED')),
+    current_revision INTEGER NOT NULL CHECK (current_revision >= 0),
     core_version INTEGER NOT NULL REFERENCES core_snapshots(core_version),
     created_at TEXT NOT NULL
 );
@@ -47,8 +47,8 @@ CREATE TABLE policies (
 CREATE TABLE mount_policies (
     mount_policy_id TEXT PRIMARY KEY,
     version INTEGER NOT NULL,
-    mode TEXT NOT NULL,
-    allowed_scopes_json TEXT NOT NULL,
+    mode TEXT NOT NULL CHECK (mode IN ('GLOBAL_INTERACTION_PREFERENCE', 'BRANCH_ONLY', 'EXPLICIT_SCOPES', 'EXPLICIT_ONLY')),
+    allowed_scopes_json TEXT NOT NULL CHECK (json_valid(allowed_scopes_json)),
     allow_sensitive_operational_mount INTEGER NOT NULL CHECK (allow_sensitive_operational_mount IN (0, 1)),
     policy_hash TEXT NOT NULL,
     created_at TEXT NOT NULL
@@ -100,7 +100,7 @@ CREATE TABLE evidence (
 CREATE TABLE patches (
     id TEXT PRIMARY KEY,
     branch_id TEXT REFERENCES branches(branch_id),
-    base_revision INTEGER NOT NULL,
+    base_revision INTEGER NOT NULL CHECK (base_revision >= 0),
     core_version INTEGER NOT NULL REFERENCES core_snapshots(core_version),
     policy_snapshot_id TEXT NOT NULL REFERENCES policies(policy_snapshot_id),
     status TEXT NOT NULL CHECK (status IN ('PROPOSED', 'VALIDATED', 'AUDIT_ACCEPTED', 'AUDIT_REJECTED', 'DEFERRED', 'STALE', 'COMMITTED', 'ABORTED')),
@@ -181,9 +181,12 @@ CREATE TABLE record_links (
 CREATE TABLE conflicts (
     id TEXT PRIMARY KEY,
     branch_id TEXT NOT NULL REFERENCES branches(branch_id),
+    semantic_key TEXT NOT NULL,
     status TEXT NOT NULL CHECK (status IN ('OPEN', 'RESOLVED')),
     opened_by_commit_id TEXT NOT NULL REFERENCES commits(id),
-    resolved_by_commit_id TEXT REFERENCES commits(id)
+    resolved_by_commit_id TEXT REFERENCES commits(id),
+    created_at TEXT NOT NULL,
+    resolved_at TEXT
 );
 
 CREATE TABLE conflict_records (
@@ -200,7 +203,7 @@ CREATE TABLE patch_operations (
     op_type TEXT CHECK (op_type IN ('ADD', 'SUPERSEDE', 'RETRACT', 'LINK', 'FLAG_CONFLICT', 'RESOLVE_CONFLICT', 'PURGE_REQUEST')),
     domain TEXT CHECK (domain IS NULL OR domain IN ('PERSONAL', 'OPERATIONAL')),
     semantic_key TEXT,
-    sensitivity TEXT CHECK (sensitivity IS NULL OR sensitivity IN ('ORDINARY', 'PERSONAL', 'SENSITIVE', 'PROHIBITED')),
+    sensitivity TEXT CHECK (sensitivity IS NULL OR sensitivity IN ('ORDINARY', 'PERSONAL', 'SENSITIVE')),
     target_record_id TEXT REFERENCES memory_records(id),
     value_storage_class TEXT CHECK (value_storage_class IS NULL OR value_storage_class IN ('INLINE_NON_SENSITIVE', 'VAULT_REF', 'NONE')),
     inline_value_json TEXT CHECK (inline_value_json IS NULL OR json_valid(inline_value_json)),
@@ -209,7 +212,13 @@ CREATE TABLE patch_operations (
     conflict_id TEXT REFERENCES conflicts(id),
     reason_code TEXT,
     UNIQUE(patch_id, op_index),
-    CHECK (sensitivity != 'SENSITIVE' OR value_storage_class = 'VAULT_REF')
+    CHECK (sensitivity IS NULL OR sensitivity != 'SENSITIVE' OR value_storage_class = 'VAULT_REF'),
+    CHECK (
+        (value_storage_class = 'INLINE_NON_SENSITIVE' AND inline_value_json IS NOT NULL AND payload_id IS NULL) OR
+        (value_storage_class = 'VAULT_REF' AND payload_id IS NOT NULL AND inline_value_json IS NULL) OR
+        (value_storage_class = 'NONE' AND payload_id IS NULL AND inline_value_json IS NULL) OR
+        (value_storage_class IS NULL AND payload_id IS NULL AND inline_value_json IS NULL)
+    )
 );
 
 CREATE TABLE patch_evidence (

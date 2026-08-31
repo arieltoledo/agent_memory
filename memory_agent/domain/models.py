@@ -74,6 +74,7 @@ class EvidenceRecord(PersistentModel):
     @model_validator(mode="after")
     def _not_prohibited(self):
         if self.sensitivity == Sensitivity.PROHIBITED: raise DomainValidationError("prohibited evidence is not durable")
+        if self.sensitivity == Sensitivity.SENSITIVE and self.storage_class != ValueStorageClass.VAULT_REF: raise DomainValidationError("sensitive evidence must be vault-backed")
         if self.scope_type == "BRANCH" and self.branch_id is None: raise DomainValidationError("branch evidence requires branch_id")
         if self.storage_class == ValueStorageClass.INLINE_NON_SENSITIVE and (self.inline_sanitized_text is None or self.payload_ref is not None): raise DomainValidationError("inline evidence requires inline text and no payload_ref")
         if self.storage_class == ValueStorageClass.VAULT_REF and (self.payload_ref is None or self.inline_sanitized_text is not None): raise DomainValidationError("vault evidence requires payload_ref and no inline text")
@@ -83,8 +84,14 @@ class PayloadObject(PersistentModel):
     payload_id: UUID; purpose: Literal["EVIDENCE", "MEMORY_VALUE", "PATCH_VALUE"]; status: PayloadStatus; sensitivity: Sensitivity; key_handle: str | None; ciphertext_location: str | None; created_at: datetime; activated_at: datetime | None; destroyed_at: datetime | None
     @model_validator(mode="after")
     def _payload_state(self):
+        if self.sensitivity == Sensitivity.PROHIBITED: raise DomainValidationError("prohibited payload is not durable")
         destroyed = self.status in {PayloadStatus.DESTROYED, PayloadStatus.ABORTED}
-        if destroyed != (self.key_handle is None and self.ciphertext_location is None): raise DomainValidationError("destroyed payloads alone may clear key and location")
+        if destroyed:
+            if self.key_handle is not None or self.ciphertext_location is not None:
+                raise DomainValidationError("destroyed payloads must clear key and location")
+        else:
+            if self.key_handle is None or self.ciphertext_location is None:
+                raise DomainValidationError("active/staged/purge_pending payloads require key and location")
         return self
 
 class DraftValue(DomainModel): proposed_value: JsonValue
@@ -124,11 +131,13 @@ class MemoryRecord(PersistentModel):
         if self.storage_class == ValueStorageClass.NONE and (self.inline_value is not None or self.payload_ref is not None):
             raise DomainValidationError("NONE memory cannot retain a value reference")
         if self.sensitivity == Sensitivity.PROHIBITED: raise DomainValidationError("prohibited memory is never durable")
+        if self.sensitivity == Sensitivity.SENSITIVE and (self.storage_class != ValueStorageClass.VAULT_REF or self.payload_ref is None or self.inline_value is not None): raise DomainValidationError("sensitive memory must be vault-backed")
         if self.domain == MemoryDomain.PERSONAL and (self.storage_class != ValueStorageClass.VAULT_REF or self.payload_ref is None or self.inline_value is not None): raise DomainValidationError("personal memory must be vault-backed")
         if self.status == RecordStatus.PURGED and self.domain == MemoryDomain.PERSONAL and self.inline_value is not None: raise DomainValidationError("purged tombstones cannot retain inline values")
         return self
 
-class ConflictRecord(DomainModel): conflict_id: UUID; branch_id: UUID; semantic_key: str; status: ConflictStatus; created_commit_id: UUID; resolved_commit_id: UUID | None
+class ConflictRecord(PersistentModel): conflict_id: UUID; branch_id: UUID; semantic_key: str; status: ConflictStatus; created_commit_id: UUID; resolved_commit_id: UUID | None; created_at: datetime; resolved_at: datetime | None = None
+class ConflictRecordRole(DomainModel): conflict_id: UUID; record_id: UUID; role: Literal["WINNER", "LOSER", "COMPETING"]
 class MountPolicy(DomainModel): mount_policy_id: UUID; version: int; mode: Literal["GLOBAL_INTERACTION_PREFERENCE", "BRANCH_ONLY", "EXPLICIT_SCOPES", "EXPLICIT_ONLY"]; allowed_scopes: tuple[str, ...]; allow_sensitive_operational_mount: bool; policy_hash: str
 class AccessLease(PersistentModel): lease_id: UUID; record_id: UUID; requested_scope: str; active_branch_id: UUID | None; policy_snapshot_id: UUID; status: LeaseStatus; issued_at: datetime; expires_at: datetime; revoked_at: datetime | None
 class PurgeJob(PersistentModel): purge_id: UUID; record_id: UUID; status: PurgeStatus; requested_at: datetime; started_at: datetime | None; completed_at: datetime | None; failure_code: str | None
