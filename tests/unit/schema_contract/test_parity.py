@@ -210,7 +210,7 @@ def _mk_evidence(scope_type, branch_id, storage_class, inline=None, payload_ref=
 EVID_SQL = (
     "INSERT INTO evidence (id, scope_type, branch_id, source_kind, status, sensitivity, "
     "storage_class, inline_sanitized_text, payload_id, sanitization_applied, "
-    "removed_categories, policy_snapshot_id, created_at) "
+    "removed_categories_json, policy_snapshot_id, created_at) "
     "VALUES (?, ?, ?, 'MSG', 'ACTIVE', ?, ?, ?, ?, 1, '[]', 'policy-1', ?)"
 )
 
@@ -240,16 +240,16 @@ def test_parity_evidence_prohibited_impossible(conn):
         conn,
         # positive: ORDINARY sensitivity
         _pyd_accepts(lambda: _mk_evidence(
-            "GLOBAL", None, ValueStorageClass.NONE, sensitivity=Sensitivity.ORDINARY)),
+            "GLOBAL", None, ValueStorageClass.INLINE_NON_SENSITIVE, inline="ok", sensitivity=Sensitivity.ORDINARY)),
         _sql_accepts(conn, EVID_SQL, (
             uuid.uuid4().hex, "GLOBAL", None, "ORDINARY",
-            "NONE", None, None, NOW)),
+            "INLINE_NON_SENSITIVE", "ok", None, NOW)),
         # negative: PROHIBITED sensitivity
         _pyd_accepts(lambda: _mk_evidence(
-            "GLOBAL", None, ValueStorageClass.NONE, sensitivity=Sensitivity.PROHIBITED)),
+            "GLOBAL", None, ValueStorageClass.INLINE_NON_SENSITIVE, inline="ok", sensitivity=Sensitivity.PROHIBITED)),
         _sql_accepts(conn, EVID_SQL, (
             uuid.uuid4().hex, "GLOBAL", None, "PROHIBITED",
-            "NONE", None, None, NOW)),
+            "INLINE_NON_SENSITIVE", "ok", None, NOW)),
     )
 
 

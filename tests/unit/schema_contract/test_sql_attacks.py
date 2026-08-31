@@ -197,11 +197,11 @@ def test_same_branch_revision_twice_rejected_with_positive_control(conn):
         "audit_id, core_version, policy_snapshot_id, committed_at) "
         "VALUES ('commit-rev-pos', 'branch-1', 99, NULL, 'patch-rev-pos', 'hRP', 'audit-rev-pos', 0, 'policy-1', '2026-08-31T00:00:00Z')"
     )
-    # negative: same (branch, revision=0) already used by commit-ref -> UNIQUE(branch_id,revision)
+    # negative: same (branch, revision=1) already used by commit-ref -> UNIQUE(branch_id,revision)
     expect_reject(conn,
         "INSERT INTO commits (id, branch_id, revision, previous_commit_id, patch_id, patch_hash, "
         "audit_id, core_version, policy_snapshot_id, committed_at) "
-        "VALUES ('commit-dup-rev', 'branch-1', 0, NULL, 'patch-rev-pos', 'hRP', 'audit-rev-pos', 0, 'policy-1', '2026-08-31T00:00:00Z')"
+        "VALUES ('commit-dup-rev', 'branch-1', 1, NULL, 'patch-rev-pos', 'hRP', 'audit-rev-pos', 0, 'policy-1', '2026-08-31T00:00:00Z')"
     )
 
 
@@ -248,7 +248,7 @@ def test_same_patch_id_committed_twice_rejected_with_positive_control(conn):
     expect_accept(conn,
         "INSERT INTO commits (id, branch_id, revision, previous_commit_id, patch_id, patch_hash, "
         "audit_id, core_version, policy_snapshot_id, committed_at) "
-        "VALUES ('commit-rep', 'branch-1', 1, NULL, 'patch-rep', 'hashR', 'audit-rep', 0, 'policy-1', '2026-08-31T00:00:00Z')"
+        "VALUES ('commit-rep', 'branch-1', 2, NULL, 'patch-rep', 'hashR', 'audit-rep', 0, 'policy-1', '2026-08-31T00:00:00Z')"
     )
     # distinct patch B with its own audit, so its audit_id FK is valid
     expect_accept(conn, PATCH, ("patch-other", "PROPOSED"))
@@ -257,7 +257,7 @@ def test_same_patch_id_committed_twice_rejected_with_positive_control(conn):
     expect_reject(conn,
         "INSERT INTO commits (id, branch_id, revision, previous_commit_id, patch_id, patch_hash, "
         "audit_id, core_version, policy_snapshot_id, committed_at) "
-        "VALUES ('commit-rep2', 'branch-1', 2, NULL, 'patch-rep', 'hashR', 'audit-other', 0, 'policy-1', '2026-08-31T00:00:00Z')"
+        "VALUES ('commit-rep2', 'branch-1', 3, NULL, 'patch-rep', 'hashR', 'audit-other', 0, 'policy-1', '2026-08-31T00:00:00Z')"
     )
 
 

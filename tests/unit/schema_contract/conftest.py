@@ -49,7 +49,7 @@ def _seed_base(c):
     )
     c.execute(
         "INSERT INTO evidence (id, scope_type, branch_id, source_kind, status, sensitivity, "
-        "storage_class, inline_sanitized_text, payload_id, sanitization_applied, removed_categories, "
+        "storage_class, inline_sanitized_text, payload_id, sanitization_applied, removed_categories_json, "
         "policy_snapshot_id, created_at) "
         "VALUES ('ev-1', 'BRANCH', 'branch-1', 'MSG', 'ACTIVE', 'ORDINARY', 'INLINE_NON_SENSITIVE', "
         "'sanitized', NULL, 1, '[]', 'policy-1', '2026-08-31T00:00:00Z')"
@@ -69,7 +69,7 @@ def _seed_base(c):
     c.execute(
         "INSERT INTO commits (id, branch_id, revision, previous_commit_id, patch_id, patch_hash, "
         "audit_id, core_version, policy_snapshot_id, committed_at) "
-        "VALUES ('commit-ref', 'branch-1', 0, NULL, 'patch-ref', 'hash0', 'audit-ref', 0, 'policy-1', '2026-08-31T00:00:00Z')"
+        "VALUES ('commit-ref', 'branch-1', 1, NULL, 'patch-ref', 'hash0', 'audit-ref', 0, 'policy-1', '2026-08-31T00:00:00Z')"
     )
     c.execute(
         "INSERT INTO mount_policies (mount_policy_id, version, mode, allowed_scopes_json, "

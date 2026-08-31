@@ -212,7 +212,7 @@ def _ev_sql(scope_type, branch_id, storage, sensitivity, inline, payload_id):
     return (
         "INSERT INTO evidence (id, scope_type, branch_id, source_kind, status, sensitivity, "
         "storage_class, inline_sanitized_text, payload_id, sanitization_applied, "
-        "removed_categories, policy_snapshot_id, created_at) "
+        "removed_categories_json, policy_snapshot_id, created_at) "
         "VALUES (?, ?, ?, 'MSG', 'ACTIVE', ?, ?, ?, ?, 1, '[]', 'policy-1', ?)",
         (uuid.uuid4().hex, scope_type, branch_id, sensitivity, storage, inline,
          payload_id, NOW),
@@ -249,6 +249,6 @@ def test_evidence_sensitive_never_inline(conn):
 
 def test_evidence_prohibited_impossible(conn):
     pyd = pyd_accept(lambda: _ev_pyd(
-        "GLOBAL", None, ValueStorageClass.NONE, Sensitivity.PROHIBITED, None, None))
-    sql = sql_accept(conn, *_ev_sql("GLOBAL", None, "NONE", "PROHIBITED", None, None))
+        "GLOBAL", None, ValueStorageClass.INLINE_NON_SENSITIVE, Sensitivity.PROHIBITED, "x", None))
+    sql = sql_accept(conn, *_ev_sql("GLOBAL", None, "INLINE_NON_SENSITIVE", "PROHIBITED", "x", None))
     classify("evidence PROHIBITED", False, pyd, sql)

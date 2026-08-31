@@ -70,7 +70,7 @@ class ValueReference(DomainModel):
 
 
 class EvidenceRecord(PersistentModel):
-    evidence_id: UUID; scope_type: Literal["BRANCH", "PERSONAL", "GLOBAL"]; branch_id: UUID | None; source_kind: str; status: EvidenceStatus; sensitivity: Sensitivity; storage_class: ValueStorageClass; inline_sanitized_text: str | None; payload_ref: UUID | None; sanitization_applied: bool; removed_categories: tuple[str, ...]; policy_snapshot_id: UUID; created_at: datetime
+    evidence_id: UUID; scope_type: Literal["BRANCH", "PERSONAL", "GLOBAL"]; branch_id: UUID | None; source_kind: str; status: EvidenceStatus; sensitivity: Sensitivity; storage_class: Literal[ValueStorageClass.INLINE_NON_SENSITIVE, ValueStorageClass.VAULT_REF]; inline_sanitized_text: str | None; payload_ref: UUID | None; sanitization_applied: bool; removed_categories: tuple[str, ...]; policy_snapshot_id: UUID; created_at: datetime
     @model_validator(mode="after")
     def _not_prohibited(self):
         if self.sensitivity == Sensitivity.PROHIBITED: raise DomainValidationError("prohibited evidence is not durable")
@@ -95,8 +95,8 @@ class PayloadObject(PersistentModel):
         return self
 
 class DraftValue(DomainModel): proposed_value: JsonValue
-class DraftAddOperation(DomainModel): op: Literal[PatchOperationType.ADD]; operation_id: UUID; domain: MemoryDomain; semantic_key: str; sensitivity: Sensitivity; proposed_value: JsonValue; evidence_refs: tuple[UUID, ...]; lifetime: Lifetime; valid_until: datetime | None; mount_policy_id: UUID | None
-class DraftSupersedeOperation(DomainModel): op: Literal[PatchOperationType.SUPERSEDE]; operation_id: UUID; target_record_id: UUID; sensitivity: Sensitivity; proposed_value: JsonValue; evidence_refs: tuple[UUID, ...]; lifetime: Lifetime; valid_until: datetime | None
+class DraftAddOperation(DomainModel): op: Literal[PatchOperationType.ADD]; operation_id: UUID; domain: Literal[MemoryDomain.PERSONAL, MemoryDomain.OPERATIONAL]; semantic_key: str; sensitivity: Sensitivity; proposed_value: JsonValue; evidence_refs: tuple[UUID, ...]; lifetime: Literal[Lifetime.TEMPORARY, Lifetime.DURABLE]; valid_until: datetime | None; mount_policy_id: UUID | None
+class DraftSupersedeOperation(DomainModel): op: Literal[PatchOperationType.SUPERSEDE]; operation_id: UUID; target_record_id: UUID; sensitivity: Sensitivity; proposed_value: JsonValue; evidence_refs: tuple[UUID, ...]; lifetime: Literal[Lifetime.TEMPORARY, Lifetime.DURABLE]; valid_until: datetime | None
 class DraftRetractOperation(DomainModel): op: Literal[PatchOperationType.RETRACT]; operation_id: UUID; target_record_id: UUID; evidence_refs: tuple[UUID, ...]
 class DraftLinkOperation(DomainModel): op: Literal[PatchOperationType.LINK]; operation_id: UUID; source_record_id: UUID; target_record_id: UUID; relation_type: str; evidence_refs: tuple[UUID, ...]
 class DraftFlagConflictOperation(DomainModel): op: Literal[PatchOperationType.FLAG_CONFLICT]; operation_id: UUID; semantic_key: str; competing_record_refs: tuple[UUID, ...]; evidence_refs: tuple[UUID, ...]
@@ -107,8 +107,8 @@ class DraftPatch(DomainModel): draft_patch_id: UUID; branch_id: UUID | None; bas
 class PendingPayloadEnvelope(DomainModel): payload_id: UUID; ciphertext: bytes; ciphertext_digest: str; key_material: SecretBytes; purpose: str; sensitivity: Sensitivity
 class PendingValueReference(DomainModel): storage_class: Literal[ValueStorageClass.VAULT_REF]; payload_ref: UUID; ciphertext_digest: str
 
-class AddOperation(DomainModel): op: Literal[PatchOperationType.ADD]; operation_id: UUID; domain: MemoryDomain; semantic_key: str; sensitivity: Sensitivity; value: ValueReference; evidence_refs: tuple[UUID, ...]; lifetime: Lifetime; valid_until: datetime | None; mount_policy_id: UUID | None
-class SupersedeOperation(DomainModel): op: Literal[PatchOperationType.SUPERSEDE]; operation_id: UUID; target_record_id: UUID; sensitivity: Sensitivity; value: ValueReference; evidence_refs: tuple[UUID, ...]; lifetime: Lifetime; valid_until: datetime | None
+class AddOperation(DomainModel): op: Literal[PatchOperationType.ADD]; operation_id: UUID; domain: Literal[MemoryDomain.PERSONAL, MemoryDomain.OPERATIONAL]; semantic_key: str; sensitivity: Sensitivity; value: ValueReference; evidence_refs: tuple[UUID, ...]; lifetime: Literal[Lifetime.TEMPORARY, Lifetime.DURABLE]; valid_until: datetime | None; mount_policy_id: UUID | None
+class SupersedeOperation(DomainModel): op: Literal[PatchOperationType.SUPERSEDE]; operation_id: UUID; target_record_id: UUID; sensitivity: Sensitivity; value: ValueReference; evidence_refs: tuple[UUID, ...]; lifetime: Literal[Lifetime.TEMPORARY, Lifetime.DURABLE]; valid_until: datetime | None
 class RetractOperation(DomainModel): op: Literal[PatchOperationType.RETRACT]; operation_id: UUID; target_record_id: UUID; evidence_refs: tuple[UUID, ...]
 class LinkOperation(DomainModel): op: Literal[PatchOperationType.LINK]; operation_id: UUID; source_record_id: UUID; target_record_id: UUID; relation_type: str; evidence_refs: tuple[UUID, ...]
 class FlagConflictOperation(DomainModel): op: Literal[PatchOperationType.FLAG_CONFLICT]; operation_id: UUID; semantic_key: str; competing_record_refs: tuple[UUID, ...]; evidence_refs: tuple[UUID, ...]
@@ -118,10 +118,10 @@ PatchOperation = Annotated[Union[AddOperation, SupersedeOperation, RetractOperat
 
 class CognitiveStatePatch(DomainModel): patch_id: UUID; branch_id: UUID | None; base_revision: int; core_version: int; policy_snapshot_id: UUID; operations: tuple[PatchOperation, ...]; generator_model_id: str; generator_prompt_version: str
 class AuditResult(PersistentModel): audit_id: UUID; patch_id: UUID; patch_hash: str; branch_id: UUID | None; base_revision: int; core_version: int; policy_snapshot_id: UUID; evidence_refs: tuple[UUID, ...]; evidence_binding: str; decision: AuditDecision; reason_codes: tuple[str, ...]; auditor_model_id: str; auditor_prompt_version: str; created_at: datetime
-class CommitRecord(PersistentModel): commit_id: UUID; branch_id: UUID; revision: int; previous_commit_id: UUID | None; patch_id: UUID; patch_hash: str; audit_id: UUID; core_version: int; policy_snapshot_id: UUID; committed_at: datetime
+class CommitRecord(PersistentModel): commit_id: UUID; branch_id: UUID; revision: int = Field(gt=0); previous_commit_id: UUID | None; patch_id: UUID; patch_hash: str; audit_id: UUID; core_version: int; policy_snapshot_id: UUID; committed_at: datetime
 
 class MemoryRecord(PersistentModel):
-    record_id: UUID; domain: MemoryDomain; branch_id: UUID | None; semantic_key: str; kind: SemanticType; status: RecordStatus; sensitivity: Sensitivity; storage_class: ValueStorageClass; inline_value: JsonValue | None; payload_ref: UUID | None; lifetime: Lifetime; valid_until: datetime | None; timezone: str | None; policy_snapshot_id: UUID; mount_policy_id: UUID | None; created_commit_id: UUID; supersedes_record_id: UUID | None; created_at: datetime; purged_at: datetime | None
+    record_id: UUID; domain: Literal[MemoryDomain.PERSONAL, MemoryDomain.OPERATIONAL]; branch_id: UUID | None; semantic_key: str; kind: SemanticType; status: RecordStatus; sensitivity: Sensitivity; storage_class: ValueStorageClass; inline_value: JsonValue | None; payload_ref: UUID | None; lifetime: Literal[Lifetime.TEMPORARY, Lifetime.DURABLE]; valid_until: datetime | None; timezone: str | None; policy_snapshot_id: UUID; mount_policy_id: UUID | None; created_commit_id: UUID; supersedes_record_id: UUID | None; created_at: datetime; purged_at: datetime | None
     @model_validator(mode="after")
     def _memory_storage(self):
         if self.storage_class == ValueStorageClass.INLINE_NON_SENSITIVE and (self.inline_value is None or self.payload_ref is not None):
