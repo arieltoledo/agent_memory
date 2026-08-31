@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import Annotated, Any, Literal, Union
+from typing import Annotated, Literal, Union
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, SecretBytes, model_validator
+from typing_extensions import TypeAliasType
 
 from .enums import *
 from .errors import DomainValidationError
@@ -23,7 +24,8 @@ class PersistentModel(DomainModel):
         return self
 
 
-JsonValue = Any
+JsonPrimitive = Union[None, bool, int, float, str]
+JsonValue = TypeAliasType("JsonValue", Union[JsonPrimitive, list["JsonValue"], dict[str, "JsonValue"]])
 
 
 class EphemeralInput(DomainModel):
@@ -72,6 +74,9 @@ class EvidenceRecord(PersistentModel):
     @model_validator(mode="after")
     def _not_prohibited(self):
         if self.sensitivity == Sensitivity.PROHIBITED: raise DomainValidationError("prohibited evidence is not durable")
+        if self.scope_type == "BRANCH" and self.branch_id is None: raise DomainValidationError("branch evidence requires branch_id")
+        if self.storage_class == ValueStorageClass.INLINE_NON_SENSITIVE and (self.inline_sanitized_text is None or self.payload_ref is not None): raise DomainValidationError("inline evidence requires inline text and no payload_ref")
+        if self.storage_class == ValueStorageClass.VAULT_REF and (self.payload_ref is None or self.inline_sanitized_text is not None): raise DomainValidationError("vault evidence requires payload_ref and no inline text")
         return self
 
 class PayloadObject(PersistentModel):
@@ -83,7 +88,15 @@ class PayloadObject(PersistentModel):
         return self
 
 class DraftValue(DomainModel): proposed_value: JsonValue
-class DraftPatch(DomainModel): draft_patch_id: UUID; branch_id: UUID | None; base_revision: int; core_version: int; policy_snapshot_id: UUID; operations: tuple[dict[str, Any], ...]
+class DraftAddOperation(DomainModel): op: Literal[PatchOperationType.ADD]; operation_id: UUID; domain: MemoryDomain; semantic_key: str; sensitivity: Sensitivity; proposed_value: JsonValue; evidence_refs: tuple[UUID, ...]; lifetime: Lifetime; valid_until: datetime | None; mount_policy_id: UUID | None
+class DraftSupersedeOperation(DomainModel): op: Literal[PatchOperationType.SUPERSEDE]; operation_id: UUID; target_record_id: UUID; sensitivity: Sensitivity; proposed_value: JsonValue; evidence_refs: tuple[UUID, ...]; lifetime: Lifetime; valid_until: datetime | None
+class DraftRetractOperation(DomainModel): op: Literal[PatchOperationType.RETRACT]; operation_id: UUID; target_record_id: UUID; evidence_refs: tuple[UUID, ...]
+class DraftLinkOperation(DomainModel): op: Literal[PatchOperationType.LINK]; operation_id: UUID; source_record_id: UUID; target_record_id: UUID; relation_type: str; evidence_refs: tuple[UUID, ...]
+class DraftFlagConflictOperation(DomainModel): op: Literal[PatchOperationType.FLAG_CONFLICT]; operation_id: UUID; semantic_key: str; competing_record_refs: tuple[UUID, ...]; evidence_refs: tuple[UUID, ...]
+class DraftResolveConflictOperation(DomainModel): op: Literal[PatchOperationType.RESOLVE_CONFLICT]; operation_id: UUID; conflict_id: UUID; winning_record_id: UUID | None; proposed_value: JsonValue | None; evidence_refs: tuple[UUID, ...]
+class DraftPurgeRequestOperation(DomainModel): op: Literal[PatchOperationType.PURGE_REQUEST]; operation_id: UUID; target_record_id: UUID; reason_code: str
+DraftPatchOperation = Annotated[Union[DraftAddOperation, DraftSupersedeOperation, DraftRetractOperation, DraftLinkOperation, DraftFlagConflictOperation, DraftResolveConflictOperation, DraftPurgeRequestOperation], Field(discriminator="op")]
+class DraftPatch(DomainModel): draft_patch_id: UUID; branch_id: UUID | None; base_revision: int; core_version: int; policy_snapshot_id: UUID; operations: tuple[DraftPatchOperation, ...]
 class PendingPayloadEnvelope(DomainModel): payload_id: UUID; ciphertext: bytes; ciphertext_digest: str; key_material: SecretBytes; purpose: str; sensitivity: Sensitivity
 class PendingValueReference(DomainModel): storage_class: Literal[ValueStorageClass.VAULT_REF]; payload_ref: UUID; ciphertext_digest: str
 
@@ -122,4 +135,6 @@ class PurgeJob(PersistentModel): purge_id: UUID; record_id: UUID; status: PurgeS
 class PurgeTargetResult(PersistentModel): purge_id: UUID; target_id: str; purge_attempted: bool; purge_succeeded: bool; verify_absent: bool; last_checked_at: datetime; failure_code: str | None
 class DetectionEvent(PersistentModel): event_id: UUID; run_id: UUID | None; threat_type: str; expected_detection_layer: DetectionLayer | None; actual_detection_layer: DetectionLayer | None; security_outcome: SecurityOutcome; architectural_outcome: ArchitecturalOutcome; policy_bypass: bool; category: str | None; created_at: datetime
 class TestRun(PersistentModel): run_id: UUID; test_id: str; run_kind: Literal["GOLDEN", "ADVERSARIAL", "UNIT", "INTEGRATION"]; spec_version: str; technical_design_version: str; git_commit: str; policy_snapshot_id: UUID | None; analyzer_model_id: str | None; generator_model_id: str | None; auditor_model_id: str | None; analyzer_prompt_version: str | None; generator_prompt_version: str | None; auditor_prompt_version: str | None; temperature: float | None; seed: int | None; result: str; input_tokens: int | None; output_tokens: int | None; latency_ms: int | None; started_at: datetime; ended_at: datetime | None
-class SessionState(DomainModel): session_id: UUID; created_at: datetime; expires_at: datetime; conversational_items: list[Any]
+class Branch(PersistentModel): branch_id: UUID; name: str; status: Literal["ACTIVE", "ARCHIVED"]; current_revision: int = Field(ge=0); core_version: int; created_at: datetime
+class CoreSnapshot(PersistentModel): core_version: int; content_json: JsonValue; content_hash: str; created_at: datetime
+class SessionState(DomainModel): session_id: UUID; created_at: datetime; expires_at: datetime; conversational_items: list[JsonValue]
