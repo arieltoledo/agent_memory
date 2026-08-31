@@ -36,10 +36,12 @@ CREATE TABLE branch_contracts (
 );
 
 CREATE TABLE policies (
-    id TEXT PRIMARY KEY,
-    version INTEGER NOT NULL,
-    policy_hash TEXT NOT NULL,
-    activated_at TEXT NOT NULL
+    policy_snapshot_id TEXT PRIMARY KEY,
+    policy_version INTEGER NOT NULL UNIQUE,
+    policy_hash TEXT NOT NULL UNIQUE,
+    source_ref TEXT NOT NULL,
+    active INTEGER NOT NULL DEFAULT 0 CHECK (active IN (0, 1)),
+    created_at TEXT NOT NULL
 );
 
 CREATE TABLE mount_policies (
@@ -80,7 +82,7 @@ CREATE TABLE evidence (
     payload_id TEXT REFERENCES payload_objects(id),
     sanitization_applied BOOLEAN NOT NULL,
     removed_categories TEXT,
-    policy_snapshot_id TEXT NOT NULL REFERENCES policies(id),
+    policy_snapshot_id TEXT NOT NULL REFERENCES policies(policy_snapshot_id),
     created_at TEXT NOT NULL,
     CHECK (
         (scope_type = 'BRANCH' AND branch_id IS NOT NULL) OR
@@ -99,7 +101,7 @@ CREATE TABLE patches (
     branch_id TEXT REFERENCES branches(branch_id),
     base_revision INTEGER NOT NULL,
     core_version INTEGER NOT NULL REFERENCES core_snapshots(core_version),
-    policy_snapshot_id TEXT NOT NULL REFERENCES policies(id),
+    policy_snapshot_id TEXT NOT NULL REFERENCES policies(policy_snapshot_id),
     status TEXT NOT NULL CHECK (status IN ('PROPOSED', 'VALIDATED', 'AUDIT_ACCEPTED', 'AUDIT_REJECTED', 'DEFERRED', 'STALE', 'COMMITTED', 'ABORTED')),
     patch_hash TEXT NOT NULL,
     generator_model_id TEXT NOT NULL,
@@ -108,49 +110,6 @@ CREATE TABLE patches (
 );
 
 CREATE INDEX ix_patches_patch_hash ON patches(patch_hash);
-
-CREATE TABLE patch_operations (
-    id TEXT PRIMARY KEY,
-    patch_id TEXT NOT NULL REFERENCES patches(id),
-    operation_type TEXT NOT NULL CHECK (operation_type IN ('ADD', 'SUPERSEDE', 'RETRACT', 'LINK', 'FLAG_CONFLICT', 'RESOLVE_CONFLICT', 'PURGE_REQUEST')),
-    target_id TEXT,
-    semantic_key TEXT,
-    domain TEXT,
-    storage_class TEXT,
-    inline_value TEXT,
-    payload_id TEXT REFERENCES payload_objects(id),
-    CHECK (
-        NOT (domain = 'PERSONAL' AND storage_class = 'INLINE_NON_SENSITIVE')
-    )
-);
-
-CREATE TABLE patch_evidence (
-    patch_id TEXT NOT NULL REFERENCES patches(id),
-    evidence_id TEXT NOT NULL REFERENCES evidence(id),
-    PRIMARY KEY (patch_id, evidence_id)
-);
-
-CREATE TABLE audits (
-    id TEXT PRIMARY KEY,
-    patch_id TEXT NOT NULL REFERENCES patches(id),
-    patch_hash TEXT NOT NULL,
-    branch_id TEXT REFERENCES branches(branch_id),
-    base_revision INTEGER NOT NULL,
-    core_version INTEGER NOT NULL REFERENCES core_snapshots(core_version),
-    policy_snapshot_id TEXT NOT NULL REFERENCES policies(id),
-    evidence_binding TEXT NOT NULL,
-    decision TEXT NOT NULL CHECK (decision IN ('ACCEPT', 'REJECT', 'DEFER')),
-    reason_codes TEXT NOT NULL,
-    auditor_model_id TEXT NOT NULL,
-    auditor_prompt_version TEXT NOT NULL,
-    created_at TEXT NOT NULL
-);
-
-CREATE TABLE audit_evidence (
-    audit_id TEXT NOT NULL REFERENCES audits(id),
-    evidence_id TEXT NOT NULL REFERENCES evidence(id),
-    PRIMARY KEY (audit_id, evidence_id)
-);
 
 CREATE TABLE commits (
     id TEXT PRIMARY KEY,
@@ -161,26 +120,26 @@ CREATE TABLE commits (
     patch_hash TEXT NOT NULL,
     audit_id TEXT NOT NULL UNIQUE REFERENCES audits(id),
     core_version INTEGER NOT NULL REFERENCES core_snapshots(core_version),
-    policy_snapshot_id TEXT NOT NULL REFERENCES policies(id),
+    policy_snapshot_id TEXT NOT NULL REFERENCES policies(policy_snapshot_id),
     committed_at TEXT NOT NULL,
     UNIQUE (branch_id, revision)
 );
 
 CREATE TABLE memory_records (
     id TEXT PRIMARY KEY,
-    domain TEXT NOT NULL CHECK (domain IN ('SESSION', 'PERSONAL', 'OPERATIONAL')),
+    domain TEXT NOT NULL CHECK (domain IN ('PERSONAL', 'OPERATIONAL')),
     branch_id TEXT REFERENCES branches(branch_id),
     semantic_key TEXT NOT NULL,
     kind TEXT NOT NULL,
     status TEXT NOT NULL CHECK (status IN ('ACTIVE', 'SUPERSEDED', 'RETRACTED', 'PURGE_REVOKED', 'PURGED')),
     sensitivity TEXT NOT NULL CHECK (sensitivity IN ('ORDINARY', 'PERSONAL', 'SENSITIVE', 'PROHIBITED')),
     storage_class TEXT NOT NULL CHECK (storage_class IN ('INLINE_NON_SENSITIVE', 'VAULT_REF', 'NONE')),
-    inline_value TEXT,
+    inline_value_json TEXT CHECK (inline_value_json IS NULL OR json_valid(inline_value_json)),
     payload_id TEXT REFERENCES payload_objects(id),
-    lifetime TEXT NOT NULL CHECK (lifetime IN ('SESSION', 'TEMPORARY', 'DURABLE')),
+    lifetime TEXT NOT NULL CHECK (lifetime IN ('TEMPORARY', 'DURABLE')),
     valid_until TEXT,
     timezone TEXT,
-    policy_snapshot_id TEXT NOT NULL REFERENCES policies(id),
+    policy_snapshot_id TEXT NOT NULL REFERENCES policies(policy_snapshot_id),
     mount_policy_id TEXT REFERENCES mount_policies(mount_policy_id),
     created_by_commit_id TEXT NOT NULL REFERENCES commits(id),
     superseded_by_commit_id TEXT REFERENCES commits(id),
@@ -191,12 +150,12 @@ CREATE TABLE memory_records (
         (domain = 'PERSONAL' AND storage_class = 'VAULT_REF') OR (domain != 'PERSONAL')
     ),
     CHECK (
-        (storage_class = 'INLINE_NON_SENSITIVE' AND inline_value IS NOT NULL AND payload_id IS NULL) OR
-        (storage_class = 'VAULT_REF' AND payload_id IS NOT NULL AND inline_value IS NULL) OR
-        (storage_class = 'NONE' AND payload_id IS NULL AND inline_value IS NULL)
+        (storage_class = 'INLINE_NON_SENSITIVE' AND inline_value_json IS NOT NULL AND payload_id IS NULL) OR
+        (storage_class = 'VAULT_REF' AND payload_id IS NOT NULL AND inline_value_json IS NULL) OR
+        (storage_class = 'NONE' AND payload_id IS NULL AND inline_value_json IS NULL)
     ),
     CHECK (
-        (status = 'PURGED' AND domain = 'PERSONAL' AND storage_class = 'VAULT_REF' AND inline_value IS NULL AND payload_id IS NOT NULL) OR (status != 'PURGED')
+        (status = 'PURGED' AND domain = 'PERSONAL' AND storage_class = 'VAULT_REF' AND inline_value_json IS NULL AND payload_id IS NOT NULL) OR (status != 'PURGED')
     )
 );
 
@@ -230,12 +189,60 @@ CREATE TABLE conflict_records (
     PRIMARY KEY (conflict_id, record_id)
 );
 
+CREATE TABLE patch_operations (
+    operation_id TEXT PRIMARY KEY,
+    patch_id TEXT NOT NULL REFERENCES patches(id) ON DELETE CASCADE,
+    op_index INTEGER NOT NULL,
+    op_type TEXT CHECK (op_type IN ('ADD', 'SUPERSEDE', 'RETRACT', 'LINK', 'FLAG_CONFLICT', 'RESOLVE_CONFLICT', 'PURGE_REQUEST')),
+    domain TEXT CHECK (domain IS NULL OR domain IN ('PERSONAL', 'OPERATIONAL')),
+    semantic_key TEXT,
+    sensitivity TEXT CHECK (sensitivity IS NULL OR sensitivity IN ('ORDINARY', 'PERSONAL', 'SENSITIVE', 'PROHIBITED')),
+    target_record_id TEXT REFERENCES memory_records(id),
+    value_storage_class TEXT CHECK (value_storage_class IS NULL OR value_storage_class IN ('INLINE_NON_SENSITIVE', 'VAULT_REF', 'NONE')),
+    inline_value_json TEXT CHECK (inline_value_json IS NULL OR json_valid(inline_value_json)),
+    payload_id TEXT REFERENCES payload_objects(id),
+    relation_type TEXT,
+    conflict_id TEXT REFERENCES conflicts(id),
+    reason_code TEXT,
+    UNIQUE(patch_id, op_index)
+);
+
+CREATE TABLE patch_evidence (
+    patch_id TEXT NOT NULL REFERENCES patches(id),
+    evidence_id TEXT NOT NULL REFERENCES evidence(id),
+    PRIMARY KEY (patch_id, evidence_id)
+);
+
+CREATE TABLE audits (
+    id TEXT PRIMARY KEY,
+    patch_id TEXT NOT NULL UNIQUE REFERENCES patches(id),
+    patch_hash TEXT NOT NULL,
+    branch_id TEXT REFERENCES branches(branch_id),
+    base_revision INTEGER NOT NULL,
+    core_version INTEGER NOT NULL REFERENCES core_snapshots(core_version),
+    policy_snapshot_id TEXT NOT NULL REFERENCES policies(policy_snapshot_id),
+    evidence_binding TEXT NOT NULL,
+    decision TEXT NOT NULL CHECK (decision IN ('ACCEPT', 'REJECT', 'DEFER')),
+    reason_codes_json TEXT NOT NULL CHECK (json_valid(reason_codes_json)),
+    auditor_model_id TEXT NOT NULL,
+    auditor_prompt_version TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+
+CREATE TABLE audit_evidence (
+    audit_id TEXT NOT NULL REFERENCES audits(id),
+    evidence_id TEXT NOT NULL REFERENCES evidence(id),
+    PRIMARY KEY (audit_id, evidence_id)
+);
+
+
+
 CREATE TABLE access_leases (
     id TEXT PRIMARY KEY,
     record_id TEXT NOT NULL REFERENCES memory_records(id),
     requested_scope TEXT NOT NULL,
     active_branch_id TEXT REFERENCES branches(branch_id),
-    policy_snapshot_id TEXT NOT NULL REFERENCES policies(id),
+    policy_snapshot_id TEXT NOT NULL REFERENCES policies(policy_snapshot_id),
     status TEXT NOT NULL CHECK (status IN ('VALID', 'REVOKED', 'EXPIRED')),
     issued_at TEXT NOT NULL,
     expires_at TEXT NOT NULL,
@@ -253,14 +260,14 @@ CREATE TABLE purge_jobs (
 );
 
 CREATE TABLE purge_target_results (
-    id TEXT PRIMARY KEY,
-    job_id TEXT NOT NULL REFERENCES purge_jobs(id),
+    purge_id TEXT NOT NULL REFERENCES purge_jobs(id),
     target_id TEXT NOT NULL,
-    purge_attempted BOOLEAN NOT NULL,
-    purge_succeeded BOOLEAN NOT NULL,
-    verify_absent BOOLEAN NOT NULL,
+    purge_attempted INTEGER NOT NULL CHECK (purge_attempted IN (0, 1)),
+    purge_succeeded INTEGER NOT NULL CHECK (purge_succeeded IN (0, 1)),
+    verify_absent INTEGER NOT NULL CHECK (verify_absent IN (0, 1)),
     last_checked_at TEXT NOT NULL,
-    failure_code TEXT
+    failure_code TEXT,
+    PRIMARY KEY (purge_id, target_id)
 );
 
 CREATE TABLE detection_events (
@@ -283,7 +290,7 @@ CREATE TABLE test_runs (
     spec_version TEXT NOT NULL,
     technical_design_version TEXT NOT NULL,
     git_commit TEXT NOT NULL,
-    policy_snapshot_id TEXT REFERENCES policies(id),
+    policy_snapshot_id TEXT REFERENCES policies(policy_snapshot_id),
     analyzer_model_id TEXT,
     generator_model_id TEXT,
     auditor_model_id TEXT,
