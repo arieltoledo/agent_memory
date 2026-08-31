@@ -11,7 +11,7 @@ CREATE TABLE schema_migrations (
 
 CREATE TABLE core_snapshots (
     core_version INTEGER PRIMARY KEY,
-    content_json TEXT NOT NULL,
+    content_json TEXT NOT NULL CHECK (json_valid(content_json)),
     content_hash TEXT NOT NULL,
     created_at TEXT NOT NULL
 );
@@ -29,7 +29,7 @@ CREATE TABLE branch_contracts (
     contract_id TEXT PRIMARY KEY,
     branch_id TEXT NOT NULL REFERENCES branches(branch_id),
     version INTEGER NOT NULL,
-    content_json TEXT NOT NULL,
+    content_json TEXT NOT NULL CHECK (json_valid(content_json)),
     content_hash TEXT NOT NULL,
     created_at TEXT NOT NULL,
     UNIQUE(branch_id, version)
@@ -49,7 +49,7 @@ CREATE TABLE mount_policies (
     version INTEGER NOT NULL,
     mode TEXT NOT NULL,
     allowed_scopes_json TEXT NOT NULL,
-    allow_sensitive_operational_mount BOOLEAN NOT NULL,
+    allow_sensitive_operational_mount INTEGER NOT NULL CHECK (allow_sensitive_operational_mount IN (0, 1)),
     policy_hash TEXT NOT NULL,
     created_at TEXT NOT NULL
 );
@@ -58,7 +58,7 @@ CREATE TABLE payload_objects (
     id TEXT PRIMARY KEY,
     purpose TEXT NOT NULL,
     status TEXT NOT NULL CHECK (status IN ('STAGED', 'ACTIVE', 'PURGE_PENDING', 'DESTROYED', 'ABORTED')),
-    sensitivity TEXT NOT NULL CHECK (sensitivity IN ('ORDINARY', 'PERSONAL', 'SENSITIVE', 'PROHIBITED')),
+    sensitivity TEXT NOT NULL CHECK (sensitivity IN ('ORDINARY', 'PERSONAL', 'SENSITIVE')),
     key_handle TEXT,
     ciphertext_location TEXT,
     created_at TEXT NOT NULL,
@@ -93,7 +93,8 @@ CREATE TABLE evidence (
         (storage_class = 'VAULT_REF' AND payload_id IS NOT NULL AND inline_sanitized_text IS NULL) OR
         (storage_class = 'NONE' AND payload_id IS NULL AND inline_sanitized_text IS NULL)
     ),
-    CHECK (sensitivity != 'PROHIBITED')
+    CHECK (sensitivity != 'PROHIBITED'),
+    CHECK (sensitivity != 'SENSITIVE' OR storage_class = 'VAULT_REF')
 );
 
 CREATE TABLE patches (
@@ -118,7 +119,7 @@ CREATE TABLE commits (
     previous_commit_id TEXT REFERENCES commits(id),
     patch_id TEXT NOT NULL UNIQUE REFERENCES patches(id),
     patch_hash TEXT NOT NULL,
-    audit_id TEXT NOT NULL UNIQUE REFERENCES audits(id),
+    audit_id TEXT NOT NULL UNIQUE,
     core_version INTEGER NOT NULL REFERENCES core_snapshots(core_version),
     policy_snapshot_id TEXT NOT NULL REFERENCES policies(policy_snapshot_id),
     committed_at TEXT NOT NULL,
@@ -146,6 +147,7 @@ CREATE TABLE memory_records (
     created_at TEXT NOT NULL,
     purged_at TEXT,
     CHECK (sensitivity != 'PROHIBITED'),
+    CHECK (sensitivity != 'SENSITIVE' OR storage_class = 'VAULT_REF'),
     CHECK (
         (domain = 'PERSONAL' AND storage_class = 'VAULT_REF') OR (domain != 'PERSONAL')
     ),
@@ -171,8 +173,9 @@ CREATE TABLE record_links (
     id TEXT PRIMARY KEY,
     source_record_id TEXT NOT NULL REFERENCES memory_records(id),
     target_record_id TEXT NOT NULL REFERENCES memory_records(id),
-    relationship TEXT NOT NULL,
-    created_by_commit_id TEXT NOT NULL REFERENCES commits(id)
+    relation_type TEXT NOT NULL,
+    created_by_commit_id TEXT NOT NULL REFERENCES commits(id),
+    UNIQUE(source_record_id, target_record_id, relation_type)
 );
 
 CREATE TABLE conflicts (
@@ -186,6 +189,7 @@ CREATE TABLE conflicts (
 CREATE TABLE conflict_records (
     conflict_id TEXT NOT NULL REFERENCES conflicts(id),
     record_id TEXT NOT NULL REFERENCES memory_records(id),
+    role TEXT NOT NULL CHECK (role IN ('WINNER', 'LOSER', 'COMPETING')),
     PRIMARY KEY (conflict_id, record_id)
 );
 
@@ -204,7 +208,8 @@ CREATE TABLE patch_operations (
     relation_type TEXT,
     conflict_id TEXT REFERENCES conflicts(id),
     reason_code TEXT,
-    UNIQUE(patch_id, op_index)
+    UNIQUE(patch_id, op_index),
+    CHECK (sensitivity != 'SENSITIVE' OR value_storage_class = 'VAULT_REF')
 );
 
 CREATE TABLE patch_evidence (
@@ -234,8 +239,6 @@ CREATE TABLE audit_evidence (
     evidence_id TEXT NOT NULL REFERENCES evidence(id),
     PRIMARY KEY (audit_id, evidence_id)
 );
-
-
 
 CREATE TABLE access_leases (
     id TEXT PRIMARY KEY,
