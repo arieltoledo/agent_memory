@@ -169,3 +169,92 @@ def test_payload_object_lifecycle_four_partial_cases():
             destroyed_at=now(),
         )
 
+
+def test_add_operation_sensitive_inline_rejected():
+    from memory_agent.domain.models import AddOperation, ValueReference
+    from memory_agent.domain.enums import PatchOperationType
+    with pytest.raises(ValidationError):
+        AddOperation(
+            op=PatchOperationType.ADD,
+            operation_id=uuid4(),
+            domain=MemoryDomain.OPERATIONAL,
+            semantic_key="k",
+            sensitivity=Sensitivity.SENSITIVE,
+            value=ValueReference(storage_class=ValueStorageClass.INLINE_NON_SENSITIVE, inline_value="secret"),
+            evidence_refs=(),
+            lifetime=Lifetime.DURABLE,
+            valid_until=None,
+            mount_policy_id=None,
+        )
+
+
+def test_add_operation_sensitive_vault_accepted():
+    from memory_agent.domain.models import AddOperation, ValueReference
+    from memory_agent.domain.enums import PatchOperationType
+    op = AddOperation(
+        op=PatchOperationType.ADD,
+        operation_id=uuid4(),
+        domain=MemoryDomain.OPERATIONAL,
+        semantic_key="k",
+        sensitivity=Sensitivity.SENSITIVE,
+        value=ValueReference(storage_class=ValueStorageClass.VAULT_REF, payload_ref=uuid4(), ciphertext_digest="dig"),
+        evidence_refs=(),
+        lifetime=Lifetime.DURABLE,
+        valid_until=None,
+        mount_policy_id=None,
+    )
+    assert op.sensitivity == Sensitivity.SENSITIVE
+
+
+def test_add_operation_prohibited_rejected():
+    from memory_agent.domain.models import AddOperation, ValueReference
+    from memory_agent.domain.enums import PatchOperationType
+    with pytest.raises(ValidationError):
+        AddOperation(
+            op=PatchOperationType.ADD,
+            operation_id=uuid4(),
+            domain=MemoryDomain.OPERATIONAL,
+            semantic_key="k",
+            sensitivity=Sensitivity.PROHIBITED,
+            value=ValueReference(storage_class=ValueStorageClass.NONE),
+            evidence_refs=(),
+            lifetime=Lifetime.DURABLE,
+            valid_until=None,
+            mount_policy_id=None,
+        )
+
+
+def test_supersede_operation_sensitive_inline_rejected():
+    from memory_agent.domain.models import SupersedeOperation, ValueReference
+    from memory_agent.domain.enums import PatchOperationType
+    with pytest.raises(ValidationError):
+        SupersedeOperation(
+            op=PatchOperationType.SUPERSEDE,
+            operation_id=uuid4(),
+            target_record_id=uuid4(),
+            sensitivity=Sensitivity.SENSITIVE,
+            value=ValueReference(storage_class=ValueStorageClass.INLINE_NON_SENSITIVE, inline_value="secret"),
+            evidence_refs=(),
+            lifetime=Lifetime.DURABLE,
+            valid_until=None,
+        )
+
+
+def test_draft_add_operation_prohibited_rejected():
+    from memory_agent.domain.models import DraftAddOperation
+    from memory_agent.domain.enums import PatchOperationType
+    with pytest.raises(ValidationError):
+        DraftAddOperation(
+            op=PatchOperationType.ADD,
+            operation_id=uuid4(),
+            domain=MemoryDomain.OPERATIONAL,
+            semantic_key="k",
+            sensitivity=Sensitivity.PROHIBITED,
+            proposed_value="secret",
+            evidence_refs=(),
+            lifetime=Lifetime.DURABLE,
+            valid_until=None,
+            mount_policy_id=None,
+        )
+
+

@@ -406,3 +406,182 @@ def test_tp13_prohibited_evidence_payload(conn):
         (uuid.uuid4().hex, NOW))
     assert pyd_pos, "TP-13 positive: EVIDENCE/ORDINARY payload must ACCEPT on Pydantic"
     assert sql_pos, "TP-13 positive: EVIDENCE/ORDINARY payload must ACCEPT on SQLite"
+
+
+# ---------------------------------------------------------------------------
+# TP-14 — patch_operations.sensitivity: PROHIBITED rejected on both layers.
+# ---------------------------------------------------------------------------
+
+def test_tp14_patch_operation_prohibited_rejected(conn):
+    from memory_agent.domain.models import AddOperation, ValueReference
+    pyd_prohib = pyd_accept(lambda: AddOperation(
+        op=PatchOperationType.ADD, operation_id=uuid.uuid4(),
+        domain="OPERATIONAL", semantic_key="k", sensitivity=Sensitivity.PROHIBITED,
+        value=ValueReference(storage_class=ValueStorageClass.NONE),
+        evidence_refs=(), lifetime=Lifetime.DURABLE, valid_until=None, mount_policy_id=None,
+    ))
+    sql_prohib = sql_accept(conn,
+        "INSERT INTO patch_operations (operation_id, patch_id, op_index, op_type, sensitivity) "
+        "VALUES (?, 'patch-ref', 10, 'ADD', 'PROHIBITED')",
+        (uuid.uuid4().hex,))
+    classify("patch_operation PROHIBITED", False, pyd_prohib, sql_prohib)
+
+    # Positive control: SENSITIVE with VAULT_REF accepts on both
+    pyd_pos = pyd_accept(lambda: AddOperation(
+        op=PatchOperationType.ADD, operation_id=uuid.uuid4(),
+        domain="OPERATIONAL", semantic_key="k", sensitivity=Sensitivity.SENSITIVE,
+        value=ValueReference(storage_class=ValueStorageClass.VAULT_REF, payload_ref=uuid.uuid4(), ciphertext_digest="dig"),
+        evidence_refs=(), lifetime=Lifetime.DURABLE, valid_until=None, mount_policy_id=None,
+    ))
+    sql_pos = sql_accept(conn,
+        "INSERT INTO patch_operations (operation_id, patch_id, op_index, op_type, sensitivity, value_storage_class, payload_id) "
+        "VALUES (?, 'patch-ref', 11, 'ADD', 'SENSITIVE', 'VAULT_REF', 'payload-1')",
+        (uuid.uuid4().hex,))
+    assert pyd_pos, "TP-14 positive: SENSITIVE+VAULT_REF must ACCEPT on Pydantic"
+    assert sql_pos, "TP-14 positive: SENSITIVE+VAULT_REF must ACCEPT on SQLite"
+
+
+# ---------------------------------------------------------------------------
+# TP-15 — patch_operations.value_storage_class shapes.
+# ---------------------------------------------------------------------------
+
+def test_tp15_patch_operations_storage_class_shapes(conn):
+    # Valid shape 1: INLINE_NON_SENSITIVE with inline_value_json
+    sql_inline = sql_accept(conn,
+        "INSERT INTO patch_operations (operation_id, patch_id, op_index, op_type, value_storage_class, inline_value_json) "
+        "VALUES (?, 'patch-ref', 20, 'ADD', 'INLINE_NON_SENSITIVE', '{\"a\":1}')",
+        (uuid.uuid4().hex,))
+    assert sql_inline, "TP-15: INLINE_NON_SENSITIVE with value must ACCEPT"
+
+    # Valid shape 2: VAULT_REF with payload_id
+    sql_vault = sql_accept(conn,
+        "INSERT INTO patch_operations (operation_id, patch_id, op_index, op_type, value_storage_class, payload_id) "
+        "VALUES (?, 'patch-ref', 21, 'ADD', 'VAULT_REF', 'payload-1')",
+        (uuid.uuid4().hex,))
+    assert sql_vault, "TP-15: VAULT_REF with payload_id must ACCEPT"
+
+    # Invalid shape 1: INLINE_NON_SENSITIVE with NULL inline_value_json
+    sql_inline_null = sql_accept(conn,
+        "INSERT INTO patch_operations (operation_id, patch_id, op_index, op_type, value_storage_class, inline_value_json) "
+        "VALUES (?, 'patch-ref', 22, 'ADD', 'INLINE_NON_SENSITIVE', NULL)",
+        (uuid.uuid4().hex,))
+    assert not sql_inline_null, "TP-15: INLINE_NON_SENSITIVE without value must REJECT"
+
+    # Invalid shape 2: VAULT_REF with NULL payload_id
+    sql_vault_null = sql_accept(conn,
+        "INSERT INTO patch_operations (operation_id, patch_id, op_index, op_type, value_storage_class, payload_id) "
+        "VALUES (?, 'patch-ref', 23, 'ADD', 'VAULT_REF', NULL)",
+        (uuid.uuid4().hex,))
+    assert not sql_vault_null, "TP-15: VAULT_REF without payload must REJECT"
+
+
+# ---------------------------------------------------------------------------
+# TP-16 — branches.status enum and current_revision >= 0.
+# ---------------------------------------------------------------------------
+
+def test_tp16_branches_constraints(conn):
+    from memory_agent.domain.models import Branch
+    # Negative 1: status GARBAGE
+    pyd_bad_status = pyd_accept(lambda: Branch(
+        branch_id=uuid.uuid4(), name="b-bad", status="GARBAGE", current_revision=0, core_version=0, created_at=NOW_DT
+    ))
+    sql_bad_status = sql_accept(conn,
+        "INSERT INTO branches (branch_id, name, status, current_revision, core_version, created_at) "
+        "VALUES ('b-bad-status', 'b-bad-name', 'GARBAGE', 0, 0, ?)",
+        (NOW,))
+    classify("branch status GARBAGE", False, pyd_bad_status, sql_bad_status)
+
+    # Negative 2: current_revision < 0
+    pyd_bad_rev = pyd_accept(lambda: Branch(
+        branch_id=uuid.uuid4(), name="b-rev", status="ACTIVE", current_revision=-1, core_version=0, created_at=NOW_DT
+    ))
+    sql_bad_rev = sql_accept(conn,
+        "INSERT INTO branches (branch_id, name, status, current_revision, core_version, created_at) "
+        "VALUES ('b-bad-rev', 'b-bad-rev-name', 'ACTIVE', -1, 0, ?)",
+        (NOW,))
+    classify("branch revision < 0", False, pyd_bad_rev, sql_bad_rev)
+
+    # Positive control: valid branch
+    pyd_pos = pyd_accept(lambda: Branch(
+        branch_id=uuid.uuid4(), name="b-pos", status="ACTIVE", current_revision=0, core_version=0, created_at=NOW_DT
+    ))
+    sql_pos = sql_accept(conn,
+        "INSERT INTO branches (branch_id, name, status, current_revision, core_version, created_at) "
+        "VALUES ('b-pos', 'b-pos-name', 'ACTIVE', 0, 0, ?)",
+        (NOW,))
+    assert pyd_pos, "TP-16 positive: valid Branch must ACCEPT on Pydantic"
+    assert sql_pos, "TP-16 positive: valid branch must ACCEPT on SQLite"
+
+
+# ---------------------------------------------------------------------------
+# TP-17 — mount_policies.mode enum and allowed_scopes_json valid JSON.
+# ---------------------------------------------------------------------------
+
+def test_tp17_mount_policies_constraints(conn):
+    from memory_agent.domain.models import MountPolicy
+    # Negative 1: invalid mode
+    pyd_bad_mode = pyd_accept(lambda: MountPolicy(
+        mount_policy_id=uuid.uuid4(), version=1, mode="GARBAGE", allowed_scopes=(), allow_sensitive_operational_mount=False, policy_hash="h"
+    ))
+    sql_bad_mode = sql_accept(conn,
+        "INSERT INTO mount_policies (mount_policy_id, version, mode, allowed_scopes_json, allow_sensitive_operational_mount, policy_hash, created_at) "
+        "VALUES ('mp-bad-mode', 1, 'GARBAGE', '[]', 0, 'h', ?)",
+        (NOW,))
+    classify("mount_policy mode GARBAGE", False, pyd_bad_mode, sql_bad_mode)
+
+    # Negative 2: invalid JSON in allowed_scopes_json
+    sql_bad_json = sql_accept(conn,
+        "INSERT INTO mount_policies (mount_policy_id, version, mode, allowed_scopes_json, allow_sensitive_operational_mount, policy_hash, created_at) "
+        "VALUES ('mp-bad-json', 1, 'BRANCH_ONLY', '{bad-json', 0, 'h', ?)",
+        (NOW,))
+    assert not sql_bad_json, "TP-17: invalid JSON in allowed_scopes_json must REJECT on SQLite"
+
+    # Positive control: valid mount policy
+    pyd_pos = pyd_accept(lambda: MountPolicy(
+        mount_policy_id=uuid.uuid4(), version=1, mode="BRANCH_ONLY", allowed_scopes=("s1",), allow_sensitive_operational_mount=False, policy_hash="h"
+    ))
+    sql_pos = sql_accept(conn,
+        "INSERT INTO mount_policies (mount_policy_id, version, mode, allowed_scopes_json, allow_sensitive_operational_mount, policy_hash, created_at) "
+        "VALUES ('mp-pos', 1, 'BRANCH_ONLY', '[\"s1\"]', 0, 'h', ?)",
+        (NOW,))
+    assert pyd_pos, "TP-17 positive: valid MountPolicy must ACCEPT on Pydantic"
+    assert sql_pos, "TP-17 positive: valid mount_policy must ACCEPT on SQLite"
+
+
+# ---------------------------------------------------------------------------
+# TP-18 — conflicts table structure: semantic_key, status, created_at.
+# ---------------------------------------------------------------------------
+
+def test_tp18_conflicts_structure(conn):
+    from memory_agent.domain.models import ConflictRecord
+    from memory_agent.domain.enums import ConflictStatus
+    # Negative 1: status GARBAGE
+    pyd_bad_status = pyd_accept(lambda: ConflictRecord(
+        conflict_id=uuid.uuid4(), branch_id=uuid.uuid4(), semantic_key="sk", status="GARBAGE",
+        created_commit_id=uuid.uuid4(), resolved_commit_id=None, created_at=NOW_DT,
+    ))
+    sql_bad_status = sql_accept(conn,
+        "INSERT INTO conflicts (id, branch_id, semantic_key, status, opened_by_commit_id, created_at) "
+        "VALUES ('c-bad-status', 'branch-1', 'sk', 'GARBAGE', 'commit-ref', ?)",
+        (NOW,))
+    classify("conflict status GARBAGE", False, pyd_bad_status, sql_bad_status)
+
+    # Negative 2: NULL semantic_key
+    sql_null_key = sql_accept(conn,
+        "INSERT INTO conflicts (id, branch_id, semantic_key, status, opened_by_commit_id, created_at) "
+        "VALUES ('c-null-key', 'branch-1', NULL, 'OPEN', 'commit-ref', ?)",
+        (NOW,))
+    assert not sql_null_key, "TP-18: NULL semantic_key in conflicts must REJECT on SQLite"
+
+    # Positive control: valid ConflictRecord
+    pyd_pos = pyd_accept(lambda: ConflictRecord(
+        conflict_id=uuid.uuid4(), branch_id=uuid.uuid4(), semantic_key="sk", status=ConflictStatus.OPEN,
+        created_commit_id=uuid.uuid4(), resolved_commit_id=None, created_at=NOW_DT,
+    ))
+    sql_pos = sql_accept(conn,
+        "INSERT INTO conflicts (id, branch_id, semantic_key, status, opened_by_commit_id, created_at) "
+        "VALUES ('c-pos', 'branch-1', 'sk', 'OPEN', 'commit-ref', ?)",
+        (NOW,))
+    assert pyd_pos, "TP-18 positive: valid ConflictRecord must ACCEPT on Pydantic"
+    assert sql_pos, "TP-18 positive: valid conflict must ACCEPT on SQLite"
+

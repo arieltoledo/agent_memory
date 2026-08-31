@@ -95,8 +95,20 @@ class PayloadObject(PersistentModel):
         return self
 
 class DraftValue(DomainModel): proposed_value: JsonValue
-class DraftAddOperation(DomainModel): op: Literal[PatchOperationType.ADD]; operation_id: UUID; domain: Literal[MemoryDomain.PERSONAL, MemoryDomain.OPERATIONAL]; semantic_key: str; sensitivity: Sensitivity; proposed_value: JsonValue; evidence_refs: tuple[UUID, ...]; lifetime: Literal[Lifetime.TEMPORARY, Lifetime.DURABLE]; valid_until: datetime | None; mount_policy_id: UUID | None
-class DraftSupersedeOperation(DomainModel): op: Literal[PatchOperationType.SUPERSEDE]; operation_id: UUID; target_record_id: UUID; sensitivity: Sensitivity; proposed_value: JsonValue; evidence_refs: tuple[UUID, ...]; lifetime: Literal[Lifetime.TEMPORARY, Lifetime.DURABLE]; valid_until: datetime | None
+class DraftAddOperation(DomainModel):
+    op: Literal[PatchOperationType.ADD]; operation_id: UUID; domain: Literal[MemoryDomain.PERSONAL, MemoryDomain.OPERATIONAL]; semantic_key: str; sensitivity: Sensitivity; proposed_value: JsonValue; evidence_refs: tuple[UUID, ...]; lifetime: Literal[Lifetime.TEMPORARY, Lifetime.DURABLE]; valid_until: datetime | None; mount_policy_id: UUID | None
+    @model_validator(mode="after")
+    def _check_draft_add(self):
+        if self.sensitivity == Sensitivity.PROHIBITED: raise DomainValidationError("prohibited operation is not valid")
+        return self
+
+class DraftSupersedeOperation(DomainModel):
+    op: Literal[PatchOperationType.SUPERSEDE]; operation_id: UUID; target_record_id: UUID; sensitivity: Sensitivity; proposed_value: JsonValue; evidence_refs: tuple[UUID, ...]; lifetime: Literal[Lifetime.TEMPORARY, Lifetime.DURABLE]; valid_until: datetime | None
+    @model_validator(mode="after")
+    def _check_draft_supersede(self):
+        if self.sensitivity == Sensitivity.PROHIBITED: raise DomainValidationError("prohibited operation is not valid")
+        return self
+
 class DraftRetractOperation(DomainModel): op: Literal[PatchOperationType.RETRACT]; operation_id: UUID; target_record_id: UUID; evidence_refs: tuple[UUID, ...]
 class DraftLinkOperation(DomainModel): op: Literal[PatchOperationType.LINK]; operation_id: UUID; source_record_id: UUID; target_record_id: UUID; relation_type: str; evidence_refs: tuple[UUID, ...]
 class DraftFlagConflictOperation(DomainModel): op: Literal[PatchOperationType.FLAG_CONFLICT]; operation_id: UUID; semantic_key: str; competing_record_refs: tuple[UUID, ...]; evidence_refs: tuple[UUID, ...]
@@ -107,8 +119,23 @@ class DraftPatch(DomainModel): draft_patch_id: UUID; branch_id: UUID | None; bas
 class PendingPayloadEnvelope(DomainModel): payload_id: UUID; ciphertext: bytes; ciphertext_digest: str; key_material: SecretBytes; purpose: str; sensitivity: Sensitivity
 class PendingValueReference(DomainModel): storage_class: Literal[ValueStorageClass.VAULT_REF]; payload_ref: UUID; ciphertext_digest: str
 
-class AddOperation(DomainModel): op: Literal[PatchOperationType.ADD]; operation_id: UUID; domain: Literal[MemoryDomain.PERSONAL, MemoryDomain.OPERATIONAL]; semantic_key: str; sensitivity: Sensitivity; value: ValueReference; evidence_refs: tuple[UUID, ...]; lifetime: Literal[Lifetime.TEMPORARY, Lifetime.DURABLE]; valid_until: datetime | None; mount_policy_id: UUID | None
-class SupersedeOperation(DomainModel): op: Literal[PatchOperationType.SUPERSEDE]; operation_id: UUID; target_record_id: UUID; sensitivity: Sensitivity; value: ValueReference; evidence_refs: tuple[UUID, ...]; lifetime: Literal[Lifetime.TEMPORARY, Lifetime.DURABLE]; valid_until: datetime | None
+class AddOperation(DomainModel):
+    op: Literal[PatchOperationType.ADD]; operation_id: UUID; domain: Literal[MemoryDomain.PERSONAL, MemoryDomain.OPERATIONAL]; semantic_key: str; sensitivity: Sensitivity; value: ValueReference; evidence_refs: tuple[UUID, ...]; lifetime: Literal[Lifetime.TEMPORARY, Lifetime.DURABLE]; valid_until: datetime | None; mount_policy_id: UUID | None
+    @model_validator(mode="after")
+    def _check_add(self):
+        if self.sensitivity == Sensitivity.PROHIBITED: raise DomainValidationError("prohibited operation is not valid")
+        if self.sensitivity == Sensitivity.SENSITIVE and self.value.storage_class != ValueStorageClass.VAULT_REF: raise DomainValidationError("sensitive operations must be vault-backed")
+        if self.domain == MemoryDomain.PERSONAL and self.value.storage_class != ValueStorageClass.VAULT_REF: raise DomainValidationError("personal operations must be vault-backed")
+        return self
+
+class SupersedeOperation(DomainModel):
+    op: Literal[PatchOperationType.SUPERSEDE]; operation_id: UUID; target_record_id: UUID; sensitivity: Sensitivity; value: ValueReference; evidence_refs: tuple[UUID, ...]; lifetime: Literal[Lifetime.TEMPORARY, Lifetime.DURABLE]; valid_until: datetime | None
+    @model_validator(mode="after")
+    def _check_supersede(self):
+        if self.sensitivity == Sensitivity.PROHIBITED: raise DomainValidationError("prohibited operation is not valid")
+        if self.sensitivity == Sensitivity.SENSITIVE and self.value.storage_class != ValueStorageClass.VAULT_REF: raise DomainValidationError("sensitive operations must be vault-backed")
+        return self
+
 class RetractOperation(DomainModel): op: Literal[PatchOperationType.RETRACT]; operation_id: UUID; target_record_id: UUID; evidence_refs: tuple[UUID, ...]
 class LinkOperation(DomainModel): op: Literal[PatchOperationType.LINK]; operation_id: UUID; source_record_id: UUID; target_record_id: UUID; relation_type: str; evidence_refs: tuple[UUID, ...]
 class FlagConflictOperation(DomainModel): op: Literal[PatchOperationType.FLAG_CONFLICT]; operation_id: UUID; semantic_key: str; competing_record_refs: tuple[UUID, ...]; evidence_refs: tuple[UUID, ...]
