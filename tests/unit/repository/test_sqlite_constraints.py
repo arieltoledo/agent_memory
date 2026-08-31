@@ -128,3 +128,32 @@ def test_supersession_roundtrip(conn):
     conn.execute("INSERT INTO memory_records (id, domain, semantic_key, kind, status, sensitivity, storage_class, branch_id, lifetime, policy_snapshot_id, created_by_commit_id, supersedes_record_id, created_at) VALUES ('rec-b', 'OPERATIONAL', 'keyB', 'OTHER', 'ACTIVE', 'ORDINARY', 'NONE', 'branch-1', 'DURABLE', 'policy-1', 'commit-ref', 'rec-a', '2026-08-31T00:00:00Z')")
     row = conn.execute("SELECT supersedes_record_id FROM memory_records WHERE id = 'rec-b'").fetchone()
     assert row['supersedes_record_id'] == 'rec-a'
+
+def test_patch_operations_persistence_boundary(conn):
+    # SENSITIVE + INLINE_NON_SENSITIVE must be rejected
+    with pytest.raises(sqlite3.IntegrityError):
+        conn.execute("INSERT INTO patch_operations (operation_id, patch_id, op_index, op_type, sensitivity, value_storage_class, inline_value_json) VALUES ('op-sens', 'patch-ref', 2, 'ADD', 'SENSITIVE', 'INLINE_NON_SENSITIVE', '\"secret\"')")
+    # PROHIBITED is rejected
+    with pytest.raises(sqlite3.IntegrityError):
+        conn.execute("INSERT INTO patch_operations (operation_id, patch_id, op_index, op_type, sensitivity) VALUES ('op-pro', 'patch-ref', 2, 'ADD', 'PROHIBITED')")
+    
+    # Missing payload_id for VAULT_REF must be rejected
+    with pytest.raises(sqlite3.IntegrityError):
+        conn.execute("INSERT INTO patch_operations (operation_id, patch_id, op_index, op_type, value_storage_class, payload_id) VALUES ('op-vault', 'patch-ref', 2, 'ADD', 'VAULT_REF', NULL)")
+
+def test_restored_constraints(conn):
+    with pytest.raises(sqlite3.IntegrityError):
+        conn.execute("INSERT INTO branches (branch_id, name, status, current_revision, core_version, created_at) VALUES ('b2', 'b2', 'INVALID_STATUS', 1, 1, '2026-08-31T00:00:00Z')")
+    with pytest.raises(sqlite3.IntegrityError):
+        conn.execute("INSERT INTO branches (branch_id, name, status, current_revision, core_version, created_at) VALUES ('b2', 'b2', 'ACTIVE', -1, 1, '2026-08-31T00:00:00Z')")
+    with pytest.raises(sqlite3.IntegrityError):
+        conn.execute("INSERT INTO patches (id, branch_id, base_revision, core_version, policy_snapshot_id, status, patch_hash, generator_model_id, generator_prompt_version, proposed_at) VALUES ('p2', 'branch-1', -1, 1, 'policy-1', 'PROPOSED', 'hx', 'model', 'v1', '2026-08-31T00:00:00Z')")
+    with pytest.raises(sqlite3.IntegrityError):
+        conn.execute("INSERT INTO mount_policies (mount_policy_id, version, mode, allowed_scopes_json, allow_sensitive_operational_mount, policy_hash, created_at) VALUES ('mp1', 1, 'INVALID_MODE', '[]', 0, 'hash', '2026-08-31T00:00:00Z')")
+    with pytest.raises(sqlite3.IntegrityError):
+        conn.execute("INSERT INTO mount_policies (mount_policy_id, version, mode, allowed_scopes_json, allow_sensitive_operational_mount, policy_hash, created_at) VALUES ('mp1', 1, 'BRANCH_ONLY', 'INVALID_JSON', 0, 'hash', '2026-08-31T00:00:00Z')")
+
+def test_conflicts_schema_restored(conn):
+    with pytest.raises(sqlite3.IntegrityError):
+        # Should fail due to NOT NULL semantic_key and created_at if we omit them
+        conn.execute("INSERT INTO conflicts (id, branch_id, status, opened_by_commit_id) VALUES ('c1', 'branch-1', 'OPEN', 'commit-ref')")
