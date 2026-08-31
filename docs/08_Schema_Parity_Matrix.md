@@ -16,5 +16,5 @@
 | Patch replay | N/A | `commits.patch_id` UNIQUE | blocked by patch_id | PASS |
 | Audit decision | Pydantic `AuditDecision` enum | Enum `CHECK` | enum | PASS |
 | PURGE tombstone | `MemoryRecord` PURGED keeps payload, inline NULL | `CHECK` payload_id remains | payload ref remains | PASS |
-| Evidence Record scopes | `EvidenceRecord` rejects BRANCH w/o branch_id | `CHECK` branch_id required if BRANCH | branch_id required | PASS |
+| Evidence Record scopes | `EvidenceRecord` rejects BRANCH w/o branch_id (C1-05 closed) | `CHECK` branch_id required if BRANCH | branch_id required | PASS |
 | Patch Status Enum | Pydantic `PatchStatus` | Enum `CHECK` | enum | PASS |
